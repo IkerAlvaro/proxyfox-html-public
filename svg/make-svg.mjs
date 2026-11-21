@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, '..', 'proxyfox.svg');
+// The tab icon: the site's favicon at 32 px (svg/icon32.png), in the SVG so it shows anywhere.
+const ICON = fs.readFileSync(path.join(HERE, 'icon32.png')).toString('base64');
 
 const bundle = await build({
   entryPoints: [path.join(HERE, 'loader.js')],
@@ -34,12 +36,12 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml"
      width="100%" height="100%" style="display:block;margin:0;padding:0;background:#131211;">
   <title>Proxyfox</title>
+  <xhtml:link rel="icon" type="image/png" href="data:image/png;base64,${ICON}"/>
   <foreignObject x="0" y="0" width="100%" height="100%">
     <xhtml:iframe id="pf-frame"
       allow="cross-origin-isolated; clipboard-read; clipboard-write; fullscreen; geolocation; autoplay; publickey-credentials-create; publickey-credentials-get"
       style="position:absolute;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;display:block;background:#131211;"></xhtml:iframe>
     <xhtml:div id="pf-progress" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#131211;color:#ecebe8;font:600 14px/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-variant-numeric:tabular-nums;">
-      <xhtml:div id="pf-percent">0%</xhtml:div>
       <xhtml:div style="width:min(260px,70vw);height:4px;border-radius:2px;background:#2c2b29;overflow:hidden;"><xhtml:div id="pf-bar" style="height:100%;width:0;background:#7bd648;transition:width .2s;"></xhtml:div></xhtml:div>
     </xhtml:div>
   </foreignObject>

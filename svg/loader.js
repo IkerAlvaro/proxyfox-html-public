@@ -78,11 +78,10 @@ async function keep(cache, sig, body) {
   }
 }
 
-// The progress bar: while Proxyfox downloads (or, from this device, starts); gone once it shows.
+// The loading bar: while Proxyfox downloads (or, from this device, starts); gone once it shows.
 function progressBar(n, total) {
   $('pf-progress').style.display = 'flex';
-  const pct = total ? Math.min(n >= total ? 100 : 99, Math.floor((n / total) * 100)) : 0;
-  $('pf-percent').textContent = `${pct}%`;
+  const pct = total ? Math.min(n >= total ? 100 : 99, (n / total) * 100) : 0;
   $('pf-bar').style.width = `${pct}%`;
 }
 function show(body) {
@@ -121,7 +120,8 @@ async function start() {
     show(body);
   } catch (e) {
     console.error(`[proxyfox.svg] Proxyfox couldn't be downloaded: ${e?.message || e}`);
-    $('pf-percent').textContent = 'Download failed';
+    $('pf-bar').style.width = '100%';
+    $('pf-bar').style.background = '#d03b3b'; // red: it failed (the console says why)
   }
 }
 
