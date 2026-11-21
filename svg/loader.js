@@ -15,7 +15,26 @@
 import { httpsGet } from './tls.js';
 
 const BASE = 'https://raw.githubusercontent.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public/main/';
-const RELAYS = ['wss://itcode.vip/api/', 'wss://wisp.mercurywork.shop/'];
+// The relays, tried top to bottom for each request: the next one only when one refuses, fails or
+// stops answering. Built in from wisps.json (svg/make-svg.mjs); once a download worked, the
+// repository's newest wisps.json is kept (localStorage) and used from the next open, followed by
+// the built-in ones it doesn't list.
+const BUILT_IN = __WISPS__;
+const WISPS_KEY = 'proxyfox-svg-wisps';
+const isRelay = (u) => typeof u === 'string' && /^wss?:\/\/[^\s"]+$/.test(u);
+function relays() {
+  let kept = [];
+  try { kept = JSON.parse(localStorage.getItem(WISPS_KEY) || '[]'); } catch {}
+  return [...new Set([...(Array.isArray(kept) ? kept.filter(isRelay) : []), ...BUILT_IN])];
+}
+async function refreshRelays() {
+  try {
+    const list = JSON.parse(new TextDecoder().decode(await get(`wisps.json?t=${Date.now()}`)));
+    if (Array.isArray(list) && list.length && list.every(isRelay)) localStorage.setItem(WISPS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('[proxyfox.svg] wisps.json not updated:', e?.message || e);
+  }
+}
 // svg/sign.mjs --new-key prints this (and the private key, for the PROXYFOX_SIGNING_KEY secret).
 const PUBLIC_KEY = { kty: 'EC', crv: 'P-256', x: 'g6ninswrJTM9o-G1PSQXPRAXvrOILC7-fVOIVR8plng', y: 'x9iac4XTqmRNVRoynlrAeW1nkSoyyL4ijBX5LL0Xiz8' };
 const CACHE = 'proxyfox-svg';
@@ -29,7 +48,7 @@ const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(
 // A file of this repository: through each relay in turn, then straight from the browser.
 async function get(name, progress) {
   let last = null;
-  for (const relay of TEST?.relays || RELAYS) {
+  for (const relay of TEST?.relays || relays()) {
     try {
       const r = await httpsGet(relay, base() + name, progress);
       if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
@@ -102,6 +121,7 @@ async function start() {
     // A newer signed file for the next open, in the background.
     try {
       const sig = await latestSignature();
+      void refreshRelays();
       if (sig.sha256 !== kept.headers.get('X-Sha256')) {
         await keep(cache, sig, await signedFile(sig));
         console.log('[proxyfox.svg] a newer Proxyfox was downloaded; it opens next time');
@@ -114,6 +134,7 @@ async function start() {
   try {
     progressBar(0, 0);
     const sig = await latestSignature();
+    void refreshRelays();
     const body = await signedFile(sig, progressBar);
     progressBar(1, 1);
     await keep(cache, sig, body);
