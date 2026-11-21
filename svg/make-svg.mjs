@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Builds proxyfox.svg from svg/loader.js: bundles it (with epoxy-tls, inlined) and puts it in the
-// SVG's script. Run after changing loader.js:
+// Builds proxyfox.svg from svg/loader.js and svg/tls.js: bundles them and puts them in the
+// SVG's script. Run after changing loader.js or tls.js:
 //
 //   npm install
 //   npm run build
@@ -28,8 +28,8 @@ const js = bundle.outputFiles[0].text.replace(/]]>/g, ']]]]><![CDATA[>');
 const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Proxyfox: Made by CodedbyZach, zaka13alt and cdrlol. A loader that downloads proxyfox.html
      through a WISP relay and runs it. Licensed under the GNU AGPL 3.0 with an attribution term
-     (LICENSE in https://github.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public);
-     the built-in epoxy-tls is AGPL-3.0 (https://github.com/MercuryWorkshop/epoxy-tls).
+     (LICENSE in https://github.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public).
+     It runs only a proxyfox.html signed by Proxyfox (proxyfox.html.sig).
      Built from svg/loader.js by svg/make-svg.mjs. -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml"
      width="100%" height="100%" style="display:block;margin:0;padding:0;background:#131211;">

@@ -1,100 +1,78 @@
 // proxyfox.svg's script (svg/make-svg.mjs builds it into the SVG): a standalone loader.
 //
 // Put proxyfox.svg on any site (or open it from disk) and it downloads the newest proxyfox.html
-// from this repository through a WISP relay, over HTTPS, and runs it in a frame that fills the
-// window. Raw WISP only gives a TCP connection, so the HTTPS is done here by epoxy-tls (rustls in
-// WebAssembly, built in), which also checks GitHub's certificate: a relay can't read or change
-// the file. Relays are tried in order; only if none answers is GitHub asked straight from the
-// browser.
+// from this repository through a WISP relay, and runs it in a frame that fills the window.
 //
-// Where the site allows it (Cache Storage), the downloaded file is kept: later opens start it at
-// once and check for a newer one in the background (a conditional request, so an unchanged file
-// costs almost nothing), which the next open uses.
+// The connection is TLS done with the browser's own crypto (tls.js, based on zaka13alt's loader),
+// which doesn't check GitHub's certificate. What makes it safe is the signature instead: each
+// proxyfox.html has a proxyfox.html.sig (made by svg/sign.mjs with a private key only the sign
+// workflow has), and the loader runs a file only if its SHA-256 and size match a signature that
+// checks out with PUBLIC_KEY. A relay that answers in GitHub's place can't make one.
 //
-// Multi-threading and a saved profile need the page that shows this SVG to be cross-origin
-// isolated (the COOP/COEP headers, from the host or a service worker); the frame inherits it.
-// Elsewhere Proxyfox runs single-threaded, as a downloaded copy does.
-import initEpoxy, { EpoxyClient, EpoxyClientOptions } from '@mercuryworkshop/epoxy-tls/minimal-epoxy-bundled';
+// Where the site allows it (Cache Storage), the file is kept: later opens start it at once and
+// look for a newer signed file in the background, which the next open uses. Multi-threading and a
+// saved profile need the page showing this SVG to be cross-origin isolated; the frame inherits it.
+import { httpsGet } from './tls.js';
 
-const SOURCE = 'https://raw.githubusercontent.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public/main/proxyfox.html';
+const BASE = 'https://raw.githubusercontent.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public/main/';
 const RELAYS = ['wss://itcode.vip/api/', 'wss://wisp.mercurywork.shop/'];
+// svg/sign.mjs --new-key prints this (and the private key, for the PROXYFOX_SIGNING_KEY secret).
+const PUBLIC_KEY = { kty: 'EC', crv: 'P-256', x: 'g6ninswrJTM9o-G1PSQXPRAXvrOILC7-fVOIVR8plng', y: 'x9iac4XTqmRNVRoynlrAeW1nkSoyyL4ijBX5LL0Xiz8' };
 const CACHE = 'proxyfox-svg';
-const KEY = SOURCE; // the cache entry's key
-const TEST = globalThis.__proxyfoxSvgTest || null; // local tests only: { source, relays, insecure }
+const TEST = globalThis.__proxyfoxSvgTest || null; // local tests only: { base, relays, noDirect }
+const base = () => TEST?.base || BASE;
+const KEY = () => `${base()}proxyfox.html`; // the kept copy's key in Cache Storage
 
 const $ = (id) => document.getElementById(id);
-const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
-const withTimeout = (promise, ms, what) => Promise.race([
-  promise,
-  new Promise((_, reject) => setTimeout(() => reject(new Error(`${what}: no answer`)), ms)),
-]);
+const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 
-let epoxyReady = null;
-// GET through one relay. Resolves to { status, etag, bytes } (bytes null for a 304).
-async function getVia(relay, etag, progress) {
-  epoxyReady ??= initEpoxy();
-  await epoxyReady;
-  const options = new EpoxyClientOptions();
-  options.wisp_v2 = false;
-  options.redirect_limit = 5;
-  options.user_agent = navigator.userAgent;
-  if (TEST?.insecure) options.disable_certificate_validation = true;
-  const client = new EpoxyClient(relay, options);
-  try {
-    const res = await withTimeout(client.fetch(TEST?.source || SOURCE, { headers: { 'Accept-Encoding': 'identity', ...(etag ? { 'If-None-Match': etag } : {}) } }), 20000, relay);
-    return { status: res.status, etag: res.headers.get('etag'), bytes: res.status === 200 ? await readAll(res, progress, true) : null };
-  } finally {
-    try { client.free(); } catch {}
-  }
-}
-// GET straight from the browser (GitHub's raw files allow it), when no relay answers.
-async function getDirect(etag, progress) {
-  const res = await fetch(TEST?.source || SOURCE, { cache: 'no-store', headers: etag ? { 'If-None-Match': etag } : {} });
-  return { status: res.status, etag: res.headers.get('etag'), bytes: res.status === 200 ? await readAll(res, progress) : null };
-}
-// exact: the length is the file's own (the relay asks for it uncompressed). Straight from the
-// browser, GitHub sends it gzipped (64 MB for 86 MB): the length is the compressed size, which the
-// browser doesn't say, so the percentage stops at 99% until it's done and isn't checked.
-async function readAll(res, progress, exact = false) {
-  const total = Number(res.headers.get('content-length')) || 0;
-  const reader = res.body.getReader();
-  const parts = [];
-  let got = 0;
-  for (;;) {
-    const { done, value } = await withTimeout(reader.read(), 60000, 'the download');
-    if (done) break;
-    parts.push(value);
-    got += value.length;
-    progress?.(got, total);
-  }
-  if (exact && total && got !== total) throw new Error(`got ${mb(got)} of ${mb(total)}`);
-  return new Blob(parts, { type: 'text/html' });
-}
-async function download(etag, progress) {
+// A file of this repository: through each relay in turn, then straight from the browser.
+async function get(name, progress) {
   let last = null;
   for (const relay of TEST?.relays || RELAYS) {
     try {
-      return await getVia(relay, etag, progress);
+      const r = await httpsGet(relay, base() + name, progress);
+      if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
+      return r.body;
     } catch (e) {
       last = e;
-      console.warn(`[proxyfox.svg] ${relay} didn't get it: ${e?.message || e}`);
+      console.warn(`[proxyfox.svg] ${name} not through ${relay}: ${e?.message || e}`);
     }
   }
   if (TEST?.noDirect) throw last;
-  try {
-    return await getDirect(etag, progress);
-  } catch (e) {
-    throw new Error(`no relay got it through (${last?.message || last}), and GitHub couldn't be reached directly either`);
+  const res = await fetch(base() + name, { cache: 'no-store' }).catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
+  if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+// The newest signature, checked. Asked for with a fresh address each time, so no cache answers.
+async function latestSignature() {
+  const sig = JSON.parse(new TextDecoder().decode(await get(`proxyfox.html.sig?t=${Date.now()}`)));
+  const key = await crypto.subtle.importKey('jwk', PUBLIC_KEY, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+  const ok = sig?.format === 1 && /^[0-9a-f]{64}$/.test(sig.sha256) && Number.isInteger(sig.size) && await crypto.subtle.verify(
+    { name: 'ECDSA', hash: 'SHA-256' }, key, Uint8Array.from(atob(sig.signature), (c) => c.charCodeAt(0)),
+    new TextEncoder().encode(`proxyfox.html\n${sig.sha256}\n${sig.size}\n`));
+  if (!ok) throw new Error('proxyfox.html.sig is not signed by Proxyfox');
+  return sig;
+}
+
+// The file the signature names, checked against it (its own address per version, so a cache
+// can't hand back another one).
+async function signedFile(sig, progress) {
+  const body = await get(`proxyfox.html?v=${sig.sha256.slice(0, 16)}`, (n) => progress?.(n, sig.size));
+  if (body.length !== sig.size || hex(await crypto.subtle.digest('SHA-256', body)) !== sig.sha256) {
+    throw new Error('the downloaded proxyfox.html is not the signed one (an update may be going out: try again in a minute)');
   }
+  return body;
 }
 
 async function openCache() {
   try { return await caches.open(CACHE); } catch { return null; } // none on file:// and some hosts
 }
-async function keep(cache, got) {
-  if (!cache || !got.bytes) return;
+async function keep(cache, sig, body) {
+  if (!cache) return;
   try {
-    await cache.put(KEY, new Response(got.bytes, { headers: { 'Content-Type': 'text/html', ETag: got.etag || '' } }));
+    await cache.put(KEY(), new Response(body, { headers: { 'Content-Type': 'text/html', 'X-Sha256': sig.sha256 } }));
   } catch (e) {
     console.warn('[proxyfox.svg] not kept on this device:', e?.message || e);
   }
@@ -102,15 +80,14 @@ async function keep(cache, got) {
 
 // The progress bar: while Proxyfox downloads (or, from this device, starts); gone once it shows.
 function progressBar(n, total) {
-  const box = $('pf-progress');
-  box.style.display = 'flex';
-  const pct = total ? Math.min(99, Math.floor((n / total) * 100)) : 0;
+  $('pf-progress').style.display = 'flex';
+  const pct = total ? Math.min(n >= total ? 100 : 99, Math.floor((n / total) * 100)) : 0;
   $('pf-percent').textContent = `${pct}%`;
   $('pf-bar').style.width = `${pct}%`;
 }
-function show(blob) {
+function show(body) {
   const frame = $('pf-frame');
-  frame.src = URL.createObjectURL(blob);
+  frame.src = URL.createObjectURL(new Blob([body], { type: 'text/html' }));
   frame.addEventListener('load', () => {
     $('pf-progress').style.display = 'none';
     try { frame.focus(); } catch {}
@@ -119,28 +96,29 @@ function show(blob) {
 
 async function start() {
   const cache = await openCache();
-  const kept = cache ? await cache.match(KEY).catch(() => null) : null;
+  const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
   if (kept) {
-    // From this device: nothing to download, so the bar is full until Proxyfox shows.
     progressBar(1, 1);
-    $('pf-percent').textContent = '100%';
-    $('pf-bar').style.width = '100%';
     show(await kept.blob());
-    // A newer file for the next open, in the background.
-    download(kept.headers.get('etag'), null).then((got) => {
-      if (got.status === 200) return keep(cache, got).then(() => console.log('[proxyfox.svg] a newer Proxyfox was downloaded; it opens next time'));
-      return null;
-    }, (e) => console.warn('[proxyfox.svg] update check failed:', e?.message || e));
+    // A newer signed file for the next open, in the background.
+    try {
+      const sig = await latestSignature();
+      if (sig.sha256 !== kept.headers.get('X-Sha256')) {
+        await keep(cache, sig, await signedFile(sig));
+        console.log('[proxyfox.svg] a newer Proxyfox was downloaded; it opens next time');
+      }
+    } catch (e) {
+      console.warn('[proxyfox.svg] update check failed:', e?.message || e);
+    }
     return;
   }
   try {
     progressBar(0, 0);
-    const got = await download(null, progressBar);
-    if (got.status !== 200) throw new Error(`GitHub answered ${got.status}`);
-    $('pf-percent').textContent = '100%';
-    $('pf-bar').style.width = '100%';
-    await keep(cache, got);
-    show(got.bytes);
+    const sig = await latestSignature();
+    const body = await signedFile(sig, progressBar);
+    progressBar(1, 1);
+    await keep(cache, sig, body);
+    show(body);
   } catch (e) {
     console.error(`[proxyfox.svg] Proxyfox couldn't be downloaded: ${e?.message || e}`);
     $('pf-percent').textContent = 'Download failed';

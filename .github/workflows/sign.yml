@@ -1,0 +1,39 @@
+# Signs proxyfox.html whenever it changes on main: writes proxyfox.html.sig (svg/sign.mjs), which
+# proxyfox.svg checks before it runs a downloaded proxyfox.html. Without a matching signature the
+# loader refuses the file, so a new proxyfox.html only reaches proxyfox.svg users once this ran.
+#
+# Repository secret (Settings > Secrets and variables > Actions):
+#   PROXYFOX_SIGNING_KEY  the private key (PEM, "-----BEGIN PRIVATE KEY-----"), the pair of
+#                         PUBLIC_KEY in svg/loader.js
+name: Sign proxyfox.html
+
+on:
+  push:
+    branches: [main]
+    paths: [proxyfox.html]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sign-proxyfox
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Sign
+        env:
+          PROXYFOX_SIGNING_KEY: ${{ secrets.PROXYFOX_SIGNING_KEY }}
+        run: node svg/sign.mjs
+      - name: Commit the signature
+        run: |
+          git diff --quiet proxyfox.html.sig && { echo "Signature unchanged"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proxyfox.html.sig
+          git commit -m "Sign proxyfox.html"
+          git push
