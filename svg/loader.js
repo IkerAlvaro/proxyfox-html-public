@@ -41,8 +41,8 @@ async function getVia(relay, etag, progress) {
   if (TEST?.insecure) options.disable_certificate_validation = true;
   const client = new EpoxyClient(relay, options);
   try {
-    const res = await withTimeout(client.fetch(TEST?.source || SOURCE, { headers: etag ? { 'If-None-Match': etag } : {} }), 20000, relay);
-    return { status: res.status, etag: res.headers.get('etag'), bytes: res.status === 200 ? await readAll(res, progress) : null };
+    const res = await withTimeout(client.fetch(TEST?.source || SOURCE, { headers: { 'Accept-Encoding': 'identity', ...(etag ? { 'If-None-Match': etag } : {}) } }), 20000, relay);
+    return { status: res.status, etag: res.headers.get('etag'), bytes: res.status === 200 ? await readAll(res, progress, true) : null };
   } finally {
     try { client.free(); } catch {}
   }
@@ -52,7 +52,10 @@ async function getDirect(etag, progress) {
   const res = await fetch(TEST?.source || SOURCE, { cache: 'no-store', headers: etag ? { 'If-None-Match': etag } : {} });
   return { status: res.status, etag: res.headers.get('etag'), bytes: res.status === 200 ? await readAll(res, progress) : null };
 }
-async function readAll(res, progress) {
+// exact: the length is the file's own (the relay asks for it uncompressed). Straight from the
+// browser, GitHub sends it gzipped (64 MB for 86 MB): the length is the compressed size, which the
+// browser doesn't say, so the percentage stops at 99% until it's done and isn't checked.
+async function readAll(res, progress, exact = false) {
   const total = Number(res.headers.get('content-length')) || 0;
   const reader = res.body.getReader();
   const parts = [];
@@ -64,7 +67,7 @@ async function readAll(res, progress) {
     got += value.length;
     progress?.(got, total);
   }
-  if (total && got !== total) throw new Error(`got ${mb(got)} of ${mb(total)}`);
+  if (exact && total && got !== total) throw new Error(`got ${mb(got)} of ${mb(total)}`);
   return new Blob(parts, { type: 'text/html' });
 }
 async function download(etag, progress) {
@@ -97,10 +100,21 @@ async function keep(cache, got) {
   }
 }
 
+// The progress bar: only while the first download runs; gone once Proxyfox shows.
+function progressBar(n, total) {
+  const box = $('pf-progress');
+  box.style.display = 'flex';
+  const pct = total ? Math.min(99, Math.floor((n / total) * 100)) : 0;
+  $('pf-percent').textContent = `${pct}%`;
+  $('pf-bar').style.width = `${pct}%`;
+}
 function show(blob) {
   const frame = $('pf-frame');
   frame.src = URL.createObjectURL(blob);
-  frame.addEventListener('load', () => { try { frame.focus(); } catch {} }, { once: true });
+  frame.addEventListener('load', () => {
+    $('pf-progress').style.display = 'none';
+    try { frame.focus(); } catch {}
+  }, { once: true });
 }
 
 async function start() {
@@ -116,12 +130,16 @@ async function start() {
     return;
   }
   try {
-    const got = await download(null, (n, total) => { if (n === total || n % (8 << 20) < 65536) console.log(`[proxyfox.svg] ${mb(n)}${total ? ` of ${mb(total)}` : ''}`); });
+    progressBar(0, 0);
+    const got = await download(null, progressBar);
     if (got.status !== 200) throw new Error(`GitHub answered ${got.status}`);
+    $('pf-percent').textContent = '100%';
+    $('pf-bar').style.width = '100%';
     await keep(cache, got);
     show(got.bytes);
   } catch (e) {
     console.error(`[proxyfox.svg] Proxyfox couldn't be downloaded: ${e?.message || e}`);
+    $('pf-percent').textContent = 'Download failed';
   }
 }
 

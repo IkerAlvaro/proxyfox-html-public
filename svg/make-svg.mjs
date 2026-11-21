@@ -38,6 +38,10 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
     <xhtml:iframe id="pf-frame"
       allow="cross-origin-isolated; clipboard-read; clipboard-write; fullscreen; geolocation; autoplay; publickey-credentials-create; publickey-credentials-get"
       style="position:absolute;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;display:block;background:#131211;"></xhtml:iframe>
+    <xhtml:div id="pf-progress" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#131211;color:#ecebe8;font:600 14px/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-variant-numeric:tabular-nums;">
+      <xhtml:div id="pf-percent">0%</xhtml:div>
+      <xhtml:div style="width:min(260px,70vw);height:4px;border-radius:2px;background:#2c2b29;overflow:hidden;"><xhtml:div id="pf-bar" style="height:100%;width:0;background:#7bd648;transition:width .2s;"></xhtml:div></xhtml:div>
+    </xhtml:div>
   </foreignObject>
   <script><![CDATA[
 ${js}
