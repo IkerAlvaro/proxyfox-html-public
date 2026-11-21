@@ -2,10 +2,11 @@
   "name": "proxyfox-svg",
   "private": true,
   "type": "module",
-  "description": "Builds proxyfox.svg: a standalone loader that downloads proxyfox.html through a WISP relay",
-  "scripts": { "build": "node svg/make-svg.mjs" },
+  "description": "Builds proxyfox.svg: a small standalone loader that downloads the signed proxyfox.html through a WISP relay",
+  "scripts": {
+    "build": "node svg/make-svg.mjs"
+  },
   "devDependencies": {
-    "@mercuryworkshop/epoxy-tls": "2.1.20-1",
     "esbuild": "0.25.12"
   }
 }
