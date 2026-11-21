@@ -100,7 +100,7 @@ async function keep(cache, got) {
   }
 }
 
-// The progress bar: only while the first download runs; gone once Proxyfox shows.
+// The progress bar: while Proxyfox downloads (or, from this device, starts); gone once it shows.
 function progressBar(n, total) {
   const box = $('pf-progress');
   box.style.display = 'flex';
@@ -121,6 +121,10 @@ async function start() {
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY).catch(() => null) : null;
   if (kept) {
+    // From this device: nothing to download, so the bar is full until Proxyfox shows.
+    progressBar(1, 1);
+    $('pf-percent').textContent = '100%';
+    $('pf-bar').style.width = '100%';
     show(await kept.blob());
     // A newer file for the next open, in the background.
     download(kept.headers.get('etag'), null).then((got) => {
