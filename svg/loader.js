@@ -23,16 +23,6 @@ const KEY = SOURCE; // the cache entry's key
 const TEST = globalThis.__proxyfoxSvgTest || null; // local tests only: { source, relays, insecure }
 
 const $ = (id) => document.getElementById(id);
-const say = (text, fraction = null) => {
-  $('pf-status').textContent = text;
-  const bar = $('pf-bar');
-  bar.style.width = fraction == null ? '0' : `${Math.round(Math.min(1, fraction) * 100)}%`;
-  bar.parentNode.style.visibility = fraction == null ? 'hidden' : 'visible';
-};
-const fail = (text) => {
-  say(text);
-  $('pf-retry').style.display = 'inline-block';
-};
 const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
 const withTimeout = (promise, ms, what) => Promise.race([
   promise,
@@ -110,18 +100,13 @@ async function keep(cache, got) {
 function show(blob) {
   const frame = $('pf-frame');
   frame.src = URL.createObjectURL(blob);
-  frame.addEventListener('load', () => {
-    $('pf-loading').style.display = 'none';
-    try { frame.focus(); } catch {}
-  }, { once: true });
+  frame.addEventListener('load', () => { try { frame.focus(); } catch {} }, { once: true });
 }
 
 async function start() {
-  $('pf-retry').style.display = 'none';
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY).catch(() => null) : null;
   if (kept) {
-    say('Starting Proxyfox...');
     show(await kept.blob());
     // A newer file for the next open, in the background.
     download(kept.headers.get('etag'), null).then((got) => {
@@ -130,17 +115,14 @@ async function start() {
     }, (e) => console.warn('[proxyfox.svg] update check failed:', e?.message || e));
     return;
   }
-  say('Downloading Proxyfox through the relay...', 0);
   try {
-    const got = await download(null, (n, total) => say(`Downloading Proxyfox: ${mb(n)}${total ? ` of ${mb(total)}` : ''}`, total ? n / total : 0));
+    const got = await download(null, (n, total) => { if (n === total || n % (8 << 20) < 65536) console.log(`[proxyfox.svg] ${mb(n)}${total ? ` of ${mb(total)}` : ''}`); });
     if (got.status !== 200) throw new Error(`GitHub answered ${got.status}`);
     await keep(cache, got);
-    say('Starting Proxyfox...');
     show(got.bytes);
   } catch (e) {
-    fail(`Proxyfox couldn't be downloaded: ${e?.message || e}`);
+    console.error(`[proxyfox.svg] Proxyfox couldn't be downloaded: ${e?.message || e}`);
   }
 }
 
-$('pf-retry').addEventListener('click', () => void start());
 void start();
