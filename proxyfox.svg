@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml"
+     width="100%" height="100%" style="display:block;margin:0;padding:0;background:#131211;">
+  <title>Proxyfox</title>
+
+  <!-- Proxyfox fills the window: proxyfox.html from this same site, so it has a real address
+       (its storage, the service worker, updates) and can be cross-origin isolated. -->
+  <foreignObject x="0" y="0" width="100%" height="100%">
+    <xhtml:iframe id="proxyfox" src="proxyfox.html"
+      allow="cross-origin-isolated; clipboard-read; clipboard-write; fullscreen; geolocation; autoplay; publickey-credentials-create; publickey-credentials-get"
+      style="position:absolute;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;display:block;"></xhtml:iframe>
+  </foreignObject>
+
+  <script><![CDATA[
+(function () {
+  var frame = document.getElementById('proxyfox');
+  frame.addEventListener('load', function () { try { frame.focus(); } catch (e) {} });
+
+  // Multi-threading (and a saved profile) needs this page and Proxyfox cross-origin isolated,
+  // which this host can't do with headers: sw.js adds them to everything it serves. The first
+  // visit registers it, and once it takes over, the page reloads once so it runs isolated.
+  if (self.crossOriginIsolated || !('serviceWorker' in navigator) || !self.isSecureContext) return;
+  var KEY = 'proxyfox-svg-isolated-reload';
+  var tried = false;
+  try { tried = sessionStorage.getItem(KEY) === '1'; } catch (e) {}
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+  if (tried) return; // reloaded once already: don't loop if isolation still isn't on
+  var reload = function () {
+    try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    location.reload();
+  };
+  if (navigator.serviceWorker.controller) reload(); // controlled, yet not isolated: an older page copy
+  else navigator.serviceWorker.addEventListener('controllerchange', reload);
+})();
+  ]]></script>
+</svg>
