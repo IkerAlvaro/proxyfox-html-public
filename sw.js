@@ -1,5 +1,9 @@
 // sw.js: makes the website an installable app (PWA) that opens from this device.
 //
+// This copy is for the public site (proxyfox-html-public, pr0xyfox.dev), which hosts proxyfox.svg,
+// proxyfox.html and this file only: version.json and wisps.json come from the main website
+// (REMOTE), and the app's manifest and icons aren't here.
+//
 // proxyfox.html is one 77 MB file. This service worker keeps it, and the app's few small
 // files, in the browser's Cache Storage, so opening the app reads it from disk instead of
 // the network, and works offline. Each opening also asks the site whether proxyfox.html
@@ -16,7 +20,11 @@ const CACHE = 'firefox-html-app-v5'; // a new name downloads the app's small fil
 const APP = 'proxyfox.html';
 // The app's address before it was renamed: old links, and apps installed from it, open APP.
 const OLD_APP = 'firefox.html';
-const FILES = ['./', APP, 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
+const FILES = ['./', APP];
+// Read from the main website at every request (it allows other sites to read them): what Check for
+// updates and the relay list read. Not kept on the device.
+const REMOTE = 'https://proxyfox.codedbyzach.com/';
+const REMOTE_FILES = ['version.json', 'wisps.json'];
 const url = (file) => new URL(file, self.registration.scope).href;
 const version = (response) => response?.headers.get('etag') || response?.headers.get('last-modified') || '';
 // The light copy: proxyfox.html without the Base64 of the engine files this device keeps
@@ -88,6 +96,11 @@ self.addEventListener('fetch', (event) => {
   const { origin, pathname, search } = new URL(request.url);
   const key = origin + pathname; // the same file whatever its query (?env.NAME=...)
   if (request.method === 'GET' && key === url(OLD_APP)) return void event.respondWith(Response.redirect(url(APP) + search, 302));
+  const remote = request.method === 'GET' && REMOTE_FILES.find((file) => key === url(file));
+  if (remote) {
+    return void event.respondWith(fetch(REMOTE + remote + search, { cache: 'no-store', mode: 'cors', credentials: 'omit' })
+      .then(isolate, () => new Response('', { status: 504, statusText: 'Gateway Timeout' })));
+  }
 
   // A request that asks for no stored copy goes to the network: Check for updates' Update now
   // downloads the new proxyfox.html this way, and stores it in the cache itself.
