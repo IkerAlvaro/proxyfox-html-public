@@ -40,7 +40,9 @@ function wispOpen(relay, host, port) {
       async read(n) {
         while (have < n) {
           if (closed) return null;
-          await new Promise((r) => { waiter = r; });
+          // A relay that stops answering (20 s with nothing) counts as closed: the next one is tried.
+          const quiet = await new Promise((r) => { waiter = () => r(false); setTimeout(() => r(true), 20000); });
+          if (quiet && have < n) { closed = true; try { ws.close(); } catch {} return null; }
         }
         const out = new Uint8Array(n);
         for (let o = 0; o < n;) {

@@ -14,6 +14,10 @@ const OUT = path.join(HERE, '..', 'proxyfox.svg');
 // The tab icon: the site's favicon at 32 px (svg/icon32.png), in the SVG so it shows anywhere.
 const ICON = fs.readFileSync(path.join(HERE, 'icon32.png')).toString('base64');
 
+// The relays (wisps.json at the repository's root), tried top to bottom: built in, so the first
+// download needs nothing else. The loader also takes the repository's newest wisps.json for later.
+const WISPS = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'wisps.json'), 'utf8'));
+if (!Array.isArray(WISPS) || !WISPS.length || !WISPS.every((u) => /^wss?:\/\/[^\s"]+$/.test(u))) throw new Error('wisps.json must be a list of wss:// relay addresses');
 const bundle = await build({
   entryPoints: [path.join(HERE, 'loader.js')],
   bundle: true,
@@ -23,6 +27,7 @@ const bundle = await build({
   legalComments: 'inline',
   write: false,
   logLevel: 'warning',
+  define: { __WISPS__: JSON.stringify(WISPS) },
 });
 // Inside CDATA only "]]>" can end the script early: split it across two CDATA sections.
 const js = bundle.outputFiles[0].text.replace(/]]>/g, ']]]]><![CDATA[>');
