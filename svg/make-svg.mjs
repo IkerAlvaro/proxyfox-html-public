@@ -38,13 +38,6 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
     <xhtml:iframe id="pf-frame"
       allow="cross-origin-isolated; clipboard-read; clipboard-write; fullscreen; geolocation; autoplay; publickey-credentials-create; publickey-credentials-get"
       style="position:absolute;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;display:block;background:#131211;"></xhtml:iframe>
-    <xhtml:div id="pf-loading" style="position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;padding:16px;background:#131211;color:#ecebe8;font:15px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;text-align:center;">
-      <xhtml:div style="font-size:22px;font-weight:650;">Proxyfox</xhtml:div>
-      <xhtml:div id="pf-status">Loading...</xhtml:div>
-      <xhtml:div style="width:min(320px,80vw);height:6px;border-radius:3px;background:#34322f;overflow:hidden;visibility:hidden;"><xhtml:div id="pf-bar" style="height:100%;width:0;background:#7bd648;"></xhtml:div></xhtml:div>
-      <xhtml:button id="pf-retry" type="button" style="display:none;padding:8px 18px;border:0;border-radius:8px;background:#7bd648;color:#0e2600;font:600 14px system-ui,sans-serif;cursor:pointer;">Try again</xhtml:button>
-      <xhtml:div style="color:#a19d96;font-size:12.5px;">Made by CodedbyZach, zaka13alt and cdrlol</xhtml:div>
-    </xhtml:div>
   </foreignObject>
   <script><![CDATA[
 ${js}
