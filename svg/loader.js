@@ -46,15 +46,20 @@ const $ = (id) => document.getElementById(id);
 const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 
 // A file of this repository: through each relay in turn, then straight from the browser.
+// Relays that failed in this page load: skipped for the files after, so each dead one costs its 3 s
+// once, not once per file.
+const failed = new Set();
 async function get(name, progress) {
   let last = null;
   for (const relay of TEST?.relays || relays()) {
+    if (failed.has(relay)) continue;
     try {
       const r = await httpsGet(relay, base() + name, progress);
       if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
       return r.body;
     } catch (e) {
       last = e;
+      if (!/GitHub answered/.test(String(e?.message))) failed.add(relay); // GitHub's own answer isn't the relay's fault
       console.warn(`[proxyfox.svg] ${name} not through ${relay}: ${e?.message || e}`);
     }
   }

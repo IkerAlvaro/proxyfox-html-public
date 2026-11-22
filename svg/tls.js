@@ -6,6 +6,8 @@
 // in GitHub's place. That's why loader.js only runs a file whose signature checks out.
 
 const enc = new TextEncoder();
+// A relay has this long to open and to get the TLS handshake with GitHub done.
+const CONNECT_MS = 3000;
 const subtle = crypto.subtle;
 
 const cat = (...parts) => {
@@ -26,6 +28,9 @@ function wispOpen(relay, host, port) {
     ws.binaryType = 'arraybuffer';
     const chunks = [];
     let have = 0, closed = false, waiter = null, opened = false;
+    // How long the relay may stay silent: CONNECT_MS until the TLS handshake is done (a relay that
+    // doesn't get going is skipped fast), then 20 s during the download.
+    let quietMs = CONNECT_MS;
     const wake = () => { const w = waiter; waiter = null; w?.(); };
     const packet = (type, payload) => {
       const p = new Uint8Array(5 + payload.length);
@@ -35,13 +40,14 @@ function wispOpen(relay, host, port) {
       return p;
     };
     const pipe = {
+      connected: () => { quietMs = 20000; },
       send: (b) => ws.send(packet(2, b)),
       close: () => { try { ws.close(); } catch {} },
       async read(n) {
         while (have < n) {
           if (closed) return null;
           // A relay that stops answering (20 s with nothing) counts as closed: the next one is tried.
-          const quiet = await new Promise((r) => { waiter = () => r(false); setTimeout(() => r(true), 20000); });
+          const quiet = await new Promise((r) => { waiter = () => r(false); setTimeout(() => r(true), quietMs); });
           if (quiet && have < n) { closed = true; try { ws.close(); } catch {} return null; }
         }
         const out = new Uint8Array(n);
@@ -55,7 +61,7 @@ function wispOpen(relay, host, port) {
         return out;
       },
     };
-    const timer = setTimeout(() => { if (!opened) { ws.close(); reject(new Error(`${relay}: no answer`)); } }, 10000);
+    const timer = setTimeout(() => { if (!opened) { ws.close(); reject(new Error(`${relay}: no answer in ${CONNECT_MS / 1000} s`)); } }, CONNECT_MS);
     ws.onopen = () => {
       opened = true;
       clearTimeout(timer);
@@ -224,6 +230,7 @@ export async function httpsGet(relay, href, progress, redirects = 5) {
   const pipe = await wispOpen(relay, url.hostname, Number(url.port) || 443);
   try {
     const tls = await tlsConnect(pipe, url.hostname);
+    pipe.connected();
     await tls.write(enc.encode(`GET ${url.pathname}${url.search} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: Mozilla/5.0\r\n` +
       'Accept: */*\r\nAccept-Encoding: identity\r\n\r\n'));
     let head = null, start = new Uint8Array(0), headers = {}, status = 0, total = 0, got = 0;
