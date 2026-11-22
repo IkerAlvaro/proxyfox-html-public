@@ -46,22 +46,38 @@ const $ = (id) => document.getElementById(id);
 const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 
 // A file of this repository: through each relay in turn, then straight from the browser.
+// Relays that failed in this page load: skipped for the files after, so each dead one costs its 3 s
+// once, not once per file.
+const failed = new Set();
 async function get(name, progress) {
   let last = null;
   for (const relay of TEST?.relays || relays()) {
+    if (failed.has(relay)) continue;
     try {
       const r = await httpsGet(relay, base() + name, progress);
       if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
       return r.body;
     } catch (e) {
       last = e;
+      if (!/GitHub answered/.test(String(e?.message))) failed.add(relay); // GitHub's own answer isn't the relay's fault
       console.warn(`[proxyfox.svg] ${name} not through ${relay}: ${e?.message || e}`);
     }
   }
   if (TEST?.noDirect) throw last;
   const res = await fetch(base() + name, { cache: 'no-store' }).catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
   if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
+  // Read as it arrives, so the loading bar moves on this path too (signedFile gives the total).
+  const reader = res.body.getReader(), parts = [];
+  let got = 0;
+  for (let r; !(r = await reader.read()).done;) {
+    parts.push(r.value);
+    got += r.value.length;
+    progress?.(got, 0);
+  }
+  const body = new Uint8Array(got);
+  let at = 0;
+  for (const p of parts) { body.set(p, at); at += p.length; }
+  return body;
 }
 
 // The newest signature, checked. Asked for with a fresh address each time, so no cache answers.
