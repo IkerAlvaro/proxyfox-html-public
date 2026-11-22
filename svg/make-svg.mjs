@@ -57,3 +57,37 @@ ${js}
 `;
 fs.writeFileSync(OUT, svg);
 console.log(`make-svg: wrote ${OUT} (${(svg.length / 1048576).toFixed(2)} MB)`);
+
+// The same loader as an HTML page (proxyfox-loader.html), for hosts that take HTML but not SVG.
+// In HTML a script can't contain "</script", so that is escaped instead of "]]>".
+const htmlJs = bundle.outputFiles[0].text.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
+const html = `<!doctype html>
+<!-- Proxyfox: Made by CodedbyZach, zaka13alt and cdrlol. A loader that downloads proxyfox.html
+     through a WISP relay and runs it. Licensed under the GNU AGPL 3.0 with an attribution term
+     (LICENSE in https://github.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public).
+     It runs only a proxyfox.html signed by Proxyfox (proxyfox.html.sig).
+     Built from svg/loader.js by svg/make-svg.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proxyfox</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,${ICON}">
+<style>html, body { margin: 0; height: 100%; background: #131211; overflow: hidden; }</style>
+</head>
+<body>
+<iframe id="pf-frame"
+  allow="cross-origin-isolated; clipboard-read; clipboard-write; fullscreen; geolocation; autoplay; publickey-credentials-create; publickey-credentials-get"
+  style="position:fixed;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;display:block;background:#131211;"></iframe>
+<div id="pf-progress" style="position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:#131211;">
+  <div style="width:min(260px,70vw);height:4px;border-radius:2px;background:#2c2b29;overflow:hidden;"><div id="pf-bar" style="height:100%;width:0;background:#7bd648;transition:width .2s;"></div></div>
+</div>
+<script>
+${htmlJs}
+</script>
+</body>
+</html>
+`;
+const HTML_OUT = path.join(HERE, '..', 'proxyfox-loader.html');
+fs.writeFileSync(HTML_OUT, html);
+console.log(`make-svg: wrote ${HTML_OUT} (${(html.length / 1024).toFixed(1)} KB)`);
