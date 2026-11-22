@@ -16,7 +16,7 @@
 // proxyfox.html registers this only when opened from a website; a file opened from disk
 // has no service worker.
 
-const CACHE = 'firefox-html-app-v5'; // a new name downloads the app's small files again (v4: new icons; v5: the app is named Proxyfox)
+const CACHE = 'firefox-html-app-v6'; // a new name downloads the app's small files again (v6: the front page opens proxyfox-loader.html)
 const APP = 'proxyfox.html';
 // The app's address before it was renamed: old links, and apps installed from it, open APP.
 const OLD_APP = 'firefox.html';
