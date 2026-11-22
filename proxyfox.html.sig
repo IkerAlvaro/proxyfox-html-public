@@ -1,7 +1,7 @@
 {
  "format": 1,
  "file": "proxyfox.html",
- "sha256": "5446befcedfa20e05c5934ae6c24adb6bd82b7134acb865a2b9b2a9f861d5448",
- "size": 90688300,
- "signature": "x2C6hd4NMUnWelGnnRCZ+ulGRz9DvkBaW4ZhXj7eiEXN89oSF6N5DrRb2e1HNRCvhqiWKuHble0wW3YenSSQtg=="
+ "sha256": "681175068babcc4d756ad89ef46917eb556ed8c571880eeb8b3c5ff10359f95c",
+ "size": 90688782,
+ "signature": "C6evK5mOWvDhwF1+eBoDfVj7K+n8+ss65VVHY05VME2NfUxmBpiekNR+0qNZd0cj6nQmba+uA2/SGdUT9yrnmg=="
 }
