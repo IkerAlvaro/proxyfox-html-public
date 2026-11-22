@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds proxyfox.svg from svg/loader.js and svg/tls.js: bundles them and puts them in the
+// Builds loader.svg and loader.html from svg/loader.js and svg/tls.js: bundles them and puts them in the
 // SVG's script. Run after changing loader.js or tls.js:
 //
 //   npm install
@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const OUT = path.join(HERE, '..', 'proxyfox.svg');
+const OUT = path.join(HERE, '..', 'loader.svg'); // proxyfox.svg is a redirect to loader.html (old links)
 // The tab icon: the site's favicon at 32 px (svg/icon32.png), in the SVG so it shows anywhere.
 const ICON = fs.readFileSync(path.join(HERE, 'icon32.png')).toString('base64');
 
@@ -58,7 +58,7 @@ ${js}
 fs.writeFileSync(OUT, svg);
 console.log(`make-svg: wrote ${OUT} (${(svg.length / 1048576).toFixed(2)} MB)`);
 
-// The same loader as an HTML page (proxyfox-loader.html), for hosts that take HTML but not SVG.
+// The same loader as an HTML page (loader.html), for hosts that take HTML but not SVG.
 // In HTML a script can't contain "</script", so that is escaped instead of "]]>".
 const htmlJs = bundle.outputFiles[0].text.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
 const html = `<!doctype html>
@@ -88,6 +88,6 @@ ${htmlJs}
 </body>
 </html>
 `;
-const HTML_OUT = path.join(HERE, '..', 'proxyfox-loader.html');
+const HTML_OUT = path.join(HERE, '..', 'loader.html');
 fs.writeFileSync(HTML_OUT, html);
 console.log(`make-svg: wrote ${HTML_OUT} (${(html.length / 1024).toFixed(1)} KB)`);
