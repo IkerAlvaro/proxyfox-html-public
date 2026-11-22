@@ -61,7 +61,18 @@ async function get(name, progress) {
   if (TEST?.noDirect) throw last;
   const res = await fetch(base() + name, { cache: 'no-store' }).catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
   if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
+  // Read as it arrives, so the loading bar moves on this path too (signedFile gives the total).
+  const reader = res.body.getReader(), parts = [];
+  let got = 0;
+  for (let r; !(r = await reader.read()).done;) {
+    parts.push(r.value);
+    got += r.value.length;
+    progress?.(got, 0);
+  }
+  const body = new Uint8Array(got);
+  let at = 0;
+  for (const p of parts) { body.set(p, at); at += p.length; }
+  return body;
 }
 
 // The newest signature, checked. Asked for with a fresh address each time, so no cache answers.
