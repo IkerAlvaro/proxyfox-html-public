@@ -15,25 +15,75 @@
 import { httpsGet } from './tls.js';
 
 const BASE = 'https://raw.githubusercontent.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public/main/';
-// The relays, tried top to bottom for each request: the next one only when one refuses, fails or
-// stops answering. Built in from wisps.json (svg/make-svg.mjs); once a download worked, the
-// repository's newest wisps.json is kept (localStorage) and used from the next open, followed by
-// the built-in ones it doesn't list.
+// The relays, per web filter ({ "GoGuardian": [relays], ..., "Not sure": [...] }; an old plain list is
+// one filter). The person picks their filter (Choose your filter, the first time), and for each
+// request its relays are tried top to bottom, then the other filters': the next one only when one
+// refuses, fails or stops answering. Built in from wisps.json (svg/make-svg.mjs); once a download
+// worked, the repository's newest wisps.json is kept (localStorage) and used from the next open,
+// followed by the built-in relays it doesn't list. The chosen filter is kept under the name
+// Proxyfox reads too (proxyfox-filter), and the frame is named after it for a loader opened from a
+// file, so Proxyfox doesn't ask again.
 const BUILT_IN = __WISPS__;
 const WISPS_KEY = 'proxyfox-svg-wisps';
+const FILTER_KEY = 'proxyfox-filter';
 const isRelay = (u) => typeof u === 'string' && /^wss?:\/\/[^\s"]+$/.test(u);
+function parseFilters(data) {
+  if (Array.isArray(data)) data = { 'All relays': data };
+  if (!data || typeof data !== 'object') return null;
+  const out = {};
+  for (const [name, list] of Object.entries(data)) {
+    const urls = Array.isArray(list) ? [...new Set(list.filter(isRelay))] : [];
+    if (name.trim() && urls.length) out[name.trim()] = urls;
+  }
+  return Object.keys(out).length ? out : null;
+}
+function filters() {
+  try { return parseFilters(JSON.parse(localStorage.getItem(WISPS_KEY) || 'null')) || BUILT_IN; } catch { return BUILT_IN; }
+}
+let chosen = '';
 function relays() {
-  let kept = [];
-  try { kept = JSON.parse(localStorage.getItem(WISPS_KEY) || '[]'); } catch {}
-  return [...new Set([...(Array.isArray(kept) ? kept.filter(isRelay) : []), ...BUILT_IN])];
+  const f = filters();
+  return [...new Set([...(f[chosen] || []), ...Object.values(f).flat(), ...Object.values(BUILT_IN).flat()])];
 }
 async function refreshRelays() {
   try {
     const list = JSON.parse(new TextDecoder().decode(await get(`wisps.json?t=${Date.now()}`)));
-    if (Array.isArray(list) && list.length && list.every(isRelay)) localStorage.setItem(WISPS_KEY, JSON.stringify(list));
+    if (parseFilters(list)) localStorage.setItem(WISPS_KEY, JSON.stringify(list));
   } catch (e) {
     console.warn('[proxyfox.svg] wisps.json not updated:', e?.message || e);
   }
+}
+// The filter: the kept one if the list still has it, the only one if there is just one, else asked.
+async function chooseFilter() {
+  const names = Object.keys(filters());
+  let name = '';
+  try { name = localStorage.getItem(FILTER_KEY) || ''; } catch {}
+  if (!names.includes(name)) name = names.length === 1 ? names[0] : await askFilter(names);
+  try { localStorage.setItem(FILTER_KEY, name); } catch {}
+  chosen = name;
+}
+function askFilter(names) {
+  const select = $('pf-filter-select'), go = $('pf-filter-go');
+  const option = (value, text) => {
+    const o = document.createElementNS('http://www.w3.org/1999/xhtml', 'option'); // an SVG page has no new Option()
+    o.value = value;
+    o.textContent = text;
+    return o;
+  };
+  select.replaceChildren(option('', 'Select your filter'), ...names.map((n) => option(n, n)));
+  select.firstChild.disabled = true;
+  select.value = '';
+  go.disabled = true;
+  go.style.opacity = '.5';
+  $('pf-filter').style.display = 'flex';
+  return new Promise((resolve) => {
+    select.onchange = () => { go.disabled = !select.value; go.style.opacity = select.value ? '1' : '.5'; };
+    go.onclick = () => {
+      if (!select.value) return;
+      $('pf-filter').style.display = 'none';
+      resolve(select.value);
+    };
+  });
 }
 // svg/sign.mjs --new-key prints this (and the private key, for the PROXYFOX_SIGNING_KEY secret).
 const PUBLIC_KEY = { kty: 'EC', crv: 'P-256', x: 'g6ninswrJTM9o-G1PSQXPRAXvrOILC7-fVOIVR8plng', y: 'x9iac4XTqmRNVRoynlrAeW1nkSoyyL4ijBX5LL0Xiz8' };
@@ -121,6 +171,7 @@ function progressBar(n, total) {
 }
 function show(body) {
   const frame = $('pf-frame');
+  frame.name = `proxyfox-filter:${chosen}`;
   frame.src = URL.createObjectURL(new Blob([body], { type: 'text/html' }));
   frame.addEventListener('load', () => {
     $('pf-progress').style.display = 'none';
@@ -129,6 +180,7 @@ function show(body) {
 }
 
 async function start() {
+  await chooseFilter();
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
   if (kept) {
