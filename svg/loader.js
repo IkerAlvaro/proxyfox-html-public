@@ -303,7 +303,16 @@ async function show(body) {
   }, { once: true });
 }
 
+// Installable app (PWA): loader-sw.js keeps this page so the installed app opens without a network.
+// Its scope is /loader (loader.html, loader.svg): sw.js keeps the rest of the site.
+function registerAppWorker() {
+  if (TEST || !/^https?:$/.test(location.protocol) || !navigator.serviceWorker) return;
+  navigator.serviceWorker.register(new URL('loader-sw.js', location.href), { scope: new URL('loader', location.href).pathname })
+    .catch((e) => console.warn('[proxyfox.svg] app worker not registered:', e?.message || e));
+}
+
 async function start() {
+  registerAppWorker();
   await chooseFilter();
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
