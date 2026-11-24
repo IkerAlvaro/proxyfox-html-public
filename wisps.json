@@ -18,20 +18,10 @@
   ],
   "Lightspeed": [
     "wss://itcode.vip/api/",
-    "wss://api.zaka13.com/api/",
-    "wss://itcode.fyi/api/",
-    "wss://elkamisd.online/api/",
     "wss://tiki-tiki.b-cdn.net/api/",
     "wss://zk.mydns.se/api/",
     "wss://biology-116957419.b-cdn.net/api/",
-    "wss://english.zaka.qzz.io/api/",
-    "wss://dffdwwph7d3fk.cloudfront.net/api/",
-    "wss://zakaon.top/api/",
-    "wss://d1vajlb5xnngpm.cloudfront.net/api/",
-    "wss://zaka.indevs.in/api/",
-    "wss://8724192.xyz/api/",
-    "wss://casadipizzagallowayohio.com/api/",
-    "wss://vps-048449e5.vps.ovh.us/api/"
+    "wss://dffdwwph7d3fk.cloudfront.net/api/"
   ],
   "Securly": [
     "wss://itcode.vip/api/",
@@ -51,55 +41,78 @@
     "wss://vps-048449e5.vps.ovh.us/api/"
   ],
   "Blocksi": [
+    "wss://tiki-tiki.b-cdn.net/api/",
+    "wss://zk.mydns.se/api/",
+    "wss://biology-116957419.b-cdn.net/api/",
+    "wss://dffdwwph7d3fk.cloudfront.net/api/",
+    "wss://d1vajlb5xnngpm.cloudfront.net/api/"
+  ],
+  "Blocksi AI": [
     "wss://itcode.vip/api/",
-    "wss://api.zaka13.com/api/",
     "wss://itcode.fyi/api/",
     "wss://elkamisd.online/api/",
     "wss://tiki-tiki.b-cdn.net/api/",
     "wss://zk.mydns.se/api/",
     "wss://biology-116957419.b-cdn.net/api/",
-    "wss://english.zaka.qzz.io/api/",
     "wss://dffdwwph7d3fk.cloudfront.net/api/",
     "wss://zakaon.top/api/",
     "wss://d1vajlb5xnngpm.cloudfront.net/api/",
     "wss://zaka.indevs.in/api/",
-    "wss://8724192.xyz/api/",
-    "wss://casadipizzagallowayohio.com/api/",
-    "wss://vps-048449e5.vps.ovh.us/api/"
+    "wss://casadipizzagallowayohio.com/api/"
   ],
   "Linewize": [
     "wss://itcode.vip/api/",
-    "wss://api.zaka13.com/api/",
     "wss://itcode.fyi/api/",
     "wss://elkamisd.online/api/",
     "wss://tiki-tiki.b-cdn.net/api/",
-    "wss://zk.mydns.se/api/",
     "wss://biology-116957419.b-cdn.net/api/",
-    "wss://english.zaka.qzz.io/api/",
     "wss://dffdwwph7d3fk.cloudfront.net/api/",
-    "wss://zakaon.top/api/",
     "wss://d1vajlb5xnngpm.cloudfront.net/api/",
-    "wss://zaka.indevs.in/api/",
     "wss://8724192.xyz/api/",
-    "wss://casadipizzagallowayohio.com/api/",
-    "wss://vps-048449e5.vps.ovh.us/api/"
+    "wss://casadipizzagallowayohio.com/api/"
   ],
   "Cisco Umbrella": [
     "wss://itcode.vip/api/",
-    "wss://api.zaka13.com/api/",
     "wss://itcode.fyi/api/",
     "wss://elkamisd.online/api/",
     "wss://tiki-tiki.b-cdn.net/api/",
     "wss://zk.mydns.se/api/",
     "wss://biology-116957419.b-cdn.net/api/",
-    "wss://english.zaka.qzz.io/api/",
+    "wss://dffdwwph7d3fk.cloudfront.net/api/",
+    "wss://zakaon.top/api/",
+    "wss://d1vajlb5xnngpm.cloudfront.net/api/",
+    "wss://casadipizzagallowayohio.com/api/"
+  ],
+  "FortiGuard": [
+    "wss://itcode.vip/api/",
+    "wss://itcode.fyi/api/",
+    "wss://elkamisd.online/api/",
+    "wss://tiki-tiki.b-cdn.net/api/",
+    "wss://zk.mydns.se/api/",
+    "wss://biology-116957419.b-cdn.net/api/",
+    "wss://dffdwwph7d3fk.cloudfront.net/api/",
+    "wss://d1vajlb5xnngpm.cloudfront.net/api/",
+    "wss://casadipizzagallowayohio.com/api/"
+  ],
+  "Senso": [
+    "wss://itcode.vip/api/",
+    "wss://itcode.fyi/api/",
+    "wss://tiki-tiki.b-cdn.net/api/",
+    "wss://biology-116957419.b-cdn.net/api/",
     "wss://dffdwwph7d3fk.cloudfront.net/api/",
     "wss://zakaon.top/api/",
     "wss://d1vajlb5xnngpm.cloudfront.net/api/",
     "wss://zaka.indevs.in/api/",
-    "wss://8724192.xyz/api/",
-    "wss://casadipizzagallowayohio.com/api/",
-    "wss://vps-048449e5.vps.ovh.us/api/"
+    "wss://casadipizzagallowayohio.com/api/"
+  ],
+  "LanSchool": [
+    "wss://itcode.vip/api/",
+    "wss://itcode.fyi/api/",
+    "wss://elkamisd.online/api/",
+    "wss://zk.mydns.se/api/",
+    "wss://zakaon.top/api/",
+    "wss://zaka.indevs.in/api/",
+    "wss://casadipizzagallowayohio.com/api/"
   ],
   "Not sure": [
     "wss://itcode.vip/api/",
