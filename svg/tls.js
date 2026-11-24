@@ -281,7 +281,8 @@ function gunzipper() {
 // GET an https:// URL through `relay`. Resolves to { status, body: Uint8Array }; progress(got, total)
 // is told as the body arrives (bytes on the wire: compressed, when the server compressed it).
 // Follows redirects; a body shorter than its Content-Length fails.
-// opts.signal cancels it; opts.onConnect() is called once the TLS handshake with the site is done.
+// opts.signal cancels it; opts.onConnect() is called once the TLS handshake with the site is done;
+// opts.range = [first, last] asks for those bytes only (a 206 answer), uncompressed.
 export async function httpsGet(relay, href, progress, opts = {}, redirects = 5) {
   const url = new URL(href);
   const pipe = await wispOpen(relay, url.hostname, Number(url.port) || 443, opts.signal);
@@ -291,8 +292,9 @@ export async function httpsGet(relay, href, progress, opts = {}, redirects = 5) 
     if (opts.signal?.aborted) throw new Error(`${relay}: cancelled`);
     pipe.connected();
     opts.onConnect?.();
+    const range = opts.range ? `Range: bytes=${opts.range[0]}-${opts.range[1]}\r\n` : '';
     await tls.write(enc.encode(`GET ${url.pathname}${url.search} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: Mozilla/5.0\r\n` +
-      `Accept: */*\r\nAccept-Encoding: ${GZIP ? 'gzip' : 'identity'}\r\n\r\n`));
+      `Accept: */*\r\nAccept-Encoding: ${GZIP && !range ? 'gzip' : 'identity'}\r\n${range}\r\n`));
     let head = null, start = new Uint8Array(0), headers = {}, status = 0, total = 0, got = 0;
     const parts = [];
     for (let c; (c = await tls.read()) !== null;) {
@@ -319,7 +321,7 @@ export async function httpsGet(relay, href, progress, opts = {}, redirects = 5) 
       if (total && got >= total) break;
       if (!total && /chunked/.test(headers['transfer-encoding'] || '') && c.length >= 5 &&
         c[c.length - 5] === 48 && c[c.length - 4] === 13 && c[c.length - 3] === 10 && c[c.length - 2] === 13 && c[c.length - 1] === 10) break;
-      if (!total && !headers['transfer-encoding'] && status !== 200) break; // a redirect without a body
+      if (!total && !headers['transfer-encoding'] && status !== 200 && status !== 206) break; // a redirect without a body
     }
     if (!head) throw new Error('no HTTP answer');
     if ([301, 302, 303, 307, 308].includes(status) && headers.location) {
@@ -329,7 +331,7 @@ export async function httpsGet(relay, href, progress, opts = {}, redirects = 5) 
     if (opts.signal?.aborted) throw new Error(`${relay}: cancelled`);
     const chunked = (headers['transfer-encoding'] || '').includes('chunked');
     if (!chunked && total && got !== total) throw new Error(`got ${got} of ${total} bytes`);
-    if (unzip) { const body = await unzip.end(); unzip = null; return { status, body }; }
+    if (unzip) { const body = await unzip.end(); unzip = null; return { status, body, headers }; }
     let body = parts.length === 1 ? parts[0] : cat(...parts);
     if (chunked) body = dechunk(body);
     if (/gzip/.test(headers['content-encoding'] || '')) {
@@ -337,7 +339,7 @@ export async function httpsGet(relay, href, progress, opts = {}, redirects = 5) 
       z.push(body);
       body = await z.end();
     }
-    return { status, body };
+    return { status, body, headers };
   } finally {
     unzip?.abort();
     pipe.close();

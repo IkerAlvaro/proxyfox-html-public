@@ -104,7 +104,7 @@ let preferred = null;
 // done (or a failure) starts the next one too. The first to finish its handshake gets the request
 // and the others are closed, so a dead or slow relay costs HEDGE_MS instead of its whole 3 s.
 const HEDGE_MS = 500;
-function race(queue, name, progress) {
+function race(queue, name, progress, range) {
   return new Promise((resolve) => {
     const live = new Map(); // relay -> AbortController
     let winner = null, timer = 0, last = null;
@@ -118,6 +118,7 @@ function race(queue, name, progress) {
       live.set(relay, ctrl);
       httpsGet(relay, base() + name, (n, t) => progress?.(n, t), {
         signal: ctrl.signal,
+        range,
         onConnect: () => {
           if (winner) { if (winner !== relay) ctrl.abort(); return; } // a redirect connects the winner again
           winner = relay;
@@ -126,7 +127,8 @@ function race(queue, name, progress) {
         },
       }).then((r) => {
         live.delete(relay);
-        if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
+        if (r.status !== (range ? 206 : 200)) throw new Error(`GitHub answered ${r.status}`);
+        if (range && !String(r.headers?.['content-range'] || '').startsWith(`bytes ${range[0]}-${range[1]}/`)) throw new Error('GitHub answered another range');
         preferred = relay;
         finish({ body: r.body });
       }).catch((e) => {
@@ -143,28 +145,30 @@ function race(queue, name, progress) {
     launch();
   });
 }
-async function viaRelays(name, progress) {
+async function viaRelays(name, progress, range) {
   const queue = (TEST?.relays || relays()).filter((r) => !failed.has(r));
   if (preferred && queue.includes(preferred)) queue.unshift(...queue.splice(queue.indexOf(preferred), 1));
   let last = new Error('no relay left to try');
   while (queue.length) {
-    const r = await race(queue, name, progress);
+    const r = await race(queue, name, progress, range);
     if (r.body) return r.body;
     last = r.last;
     if (!r.retry) break;
   }
   throw last;
 }
-async function get(name, progress) {
+// range = [first, last]: only those bytes (partial updates).
+async function get(name, progress, range) {
   let last = null;
   try {
-    return await viaRelays(name, progress);
+    return await viaRelays(name, progress, range);
   } catch (e) {
     last = e;
   }
   if (TEST?.noDirect) throw last;
-  const res = await fetch(base() + name, { cache: 'no-store' }).catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
-  if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+  const res = await fetch(base() + name, { cache: 'no-store', headers: range ? { Range: `bytes=${range[0]}-${range[1]}` } : {} })
+    .catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
+  if (res.status !== (range ? 206 : 200)) throw new Error(`GitHub answered ${res.status}`);
   // Read as it arrives, so the loading bar moves on this path too (signedFile gives the total).
   const reader = res.body.getReader(), parts = [];
   let got = 0;
@@ -204,13 +208,116 @@ async function signedFile(sig, progress, body = null) {
   return body;
 }
 
+// ------------------------------------------------------------------- partial updates --
+// An update for a device that keeps an older proxyfox.html downloads only the parts that changed.
+// proxyfox.html.sig lists the new file's parts (svg/sign.mjs: each embedded asset's Base64, and the
+// page text between them) with their hashes; parts the kept copy has are taken from it, the others
+// are downloaded by byte range, and the rebuilt file must match the signed SHA-256 like any other
+// download. An app-only update is about 2 MB instead of the whole 67 MB. If anything doesn't work
+// out, the whole file is downloaded.
+const PART_GAP = 512 * 1024; // changed parts closer than this are one request (the bytes between too)
+const ASSET_OPEN = '<script type="application/octet-stream" data-asset="';
+function validParts(sig) {
+  if (!Array.isArray(sig.parts) || !sig.parts.length || sig.parts.length > 1000) return false;
+  let at = 0;
+  for (const p of sig.parts) {
+    if (p?.at !== at || !Number.isInteger(p.len) || p.len <= 0 || !/^[0-9a-f]{64}$/.test(p.sha256)) return false;
+    at += p.len;
+  }
+  return at === sig.size;
+}
+// The parts of a kept copy from before parts were kept with it: cut the way svg/sign.mjs cuts.
+async function partsOf(blob) {
+  const CH = 1 << 22;
+  const cuts = [0];
+  for (let pos = 0; pos < blob.size;) {
+    const text = await ascii(blob, pos, Math.min(blob.size, pos + CH));
+    const tag = text.indexOf(ASSET_OPEN);
+    const gt = tag < 0 ? -1 : text.indexOf('>', tag + ASSET_OPEN.length);
+    if (gt < 0) {
+      if (pos + CH >= blob.size) break;
+      pos = tag > 0 ? pos + tag : pos + CH - ASSET_OPEN.length; // a tag cut by the chunk's end is read again whole
+      continue;
+    }
+    const start = pos + gt + 1;
+    let end = -1;
+    for (let q = start; q < blob.size && end < 0; q += CH) {
+      const i = (await ascii(blob, q, Math.min(blob.size, q + CH))).indexOf('<'); // Base64 has none: this opens </script>
+      if (i >= 0) end = q + i;
+    }
+    if (end < 0) break;
+    cuts.push(start, end);
+    pos = end;
+  }
+  cuts.push(blob.size);
+  const parts = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const at = cuts[i], len = cuts[i + 1] - cuts[i];
+    if (len > 0) parts.push({ at, len, sha256: hex(await crypto.subtle.digest('SHA-256', await blob.slice(at, at + len).arrayBuffer())) });
+  }
+  return parts;
+}
+async function partialFile(sig, kept, progress) {
+  if (!validParts(sig)) return null;
+  const old = await kept.blob();
+  let oldParts = null;
+  try { oldParts = JSON.parse(kept.headers.get('X-Parts') || 'null'); } catch {}
+  if (!Array.isArray(oldParts)) oldParts = await partsOf(old);
+  const have = new Map(oldParts.map((p) => [`${p.sha256}:${p.len}`, p]));
+  const pieces = sig.parts.map((p) => {
+    const k = have.get(`${p.sha256}:${p.len}`);
+    return k ? { at: p.at, len: p.len, blob: old.slice(k.at, k.at + k.len) } : { at: p.at, len: p.len };
+  });
+  const ranges = [];
+  for (const p of pieces) {
+    if (p.blob) continue;
+    const r = ranges.at(-1);
+    if (r && p.at - (r.at + r.len) < PART_GAP) r.len = p.at + p.len - r.at;
+    else ranges.push({ at: p.at, len: p.len });
+  }
+  const need = ranges.reduce((n, r) => n + r.len, 0);
+  if (!ranges.length || need > sig.size / 2) return null; // mostly new: the whole file (gzip) is cheaper
+  let done = 0;
+  for (const r of ranges) {
+    r.data = await get(`proxyfox.html?v=${sig.sha256.slice(0, 16)}`, (n) => progress?.(done + n, need), [r.at, r.at + r.len - 1]);
+    if (r.data.length !== r.len) throw new Error(`got ${r.data.length} of ${r.len} bytes`);
+    done += r.len;
+  }
+  const out = [];
+  let pos = 0, ri = 0;
+  for (const p of pieces) {
+    if (p.at < pos) continue; // inside a downloaded range
+    const r = ranges[ri];
+    if (r && r.at === p.at) { out.push(r.data); pos = r.at + r.len; ri++; }
+    else { out.push(p.blob); pos = p.at + p.len; }
+  }
+  const body = new Uint8Array(await new Blob(out).arrayBuffer());
+  if (!await isSigned(sig, body)) throw new Error('the rebuilt proxyfox.html is not the signed one');
+  console.log(`[proxyfox.svg] partial update: downloaded ${(need / 1048576).toFixed(1)} MB of ${(sig.size / 1048576).toFixed(1)} MB`);
+  return body;
+}
+// A new version: only what changed when this device keeps an older one, else the whole file.
+async function newVersion(sig, kept, progress) {
+  if (kept) {
+    try {
+      const body = await partialFile(sig, kept, progress);
+      if (body) return body;
+    } catch (e) {
+      console.warn('[proxyfox.svg] partial update failed, downloading the whole file:', e?.message || e);
+    }
+  }
+  return signedFile(sig, progress);
+}
+
 async function openCache() {
   try { return await caches.open(CACHE); } catch { return null; } // none on file:// and some hosts
 }
 async function keep(cache, sig, body) {
   if (!cache) return;
   try {
-    await cache.put(KEY(), new Response(body, { headers: { 'Content-Type': 'text/html', 'X-Sha256': sig.sha256 } }));
+    const headers = { 'Content-Type': 'text/html', 'X-Sha256': sig.sha256 };
+    if (validParts(sig)) headers['X-Parts'] = JSON.stringify(sig.parts); // for the next partial update
+    await cache.put(KEY(), new Response(body, { headers }));
   } catch (e) {
     console.warn('[proxyfox.svg] not kept on this device:', e?.message || e);
   }
@@ -338,7 +445,7 @@ addEventListener('message', async (e) => {
     const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
     let body = kept && kept.headers.get('X-Sha256') === sig.sha256 ? await kept.blob() : null;
     if (!body) {
-      body = await signedFile(sig, (n, total) => progress(n, total || sig.size));
+      body = await newVersion(sig, kept && await cache.match(KEY()).catch(() => null), (n, total) => progress(n, total || sig.size));
       await keep(cache, sig, body);
     }
     tell({ type: 'proxyfox-update-ready' });
@@ -364,7 +471,8 @@ async function start() {
       const sig = await latestSignature();
       void refreshRelays();
       if (sig.sha256 !== kept.headers.get('X-Sha256')) {
-        await keep(cache, sig, await signedFile(sig, (n, total) => backgroundProgress?.(n, total)));
+        const old = await cache.match(KEY()).catch(() => null); // kept was read to start it: read again
+        await keep(cache, sig, await newVersion(sig, old, (n, total) => backgroundProgress?.(n, total)));
         console.log('[proxyfox.svg] a newer Proxyfox was downloaded; it opens next time');
       }
     })().catch((e) => console.warn('[proxyfox.svg] update check failed:', e?.message || e));

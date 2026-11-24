@@ -10,7 +10,7 @@ name: Sign proxyfox.html
 on:
   push:
     branches: [main]
-    paths: [proxyfox.html]
+    paths: [proxyfox.html, svg/sign.mjs] # the signature file's format changes with sign.mjs
   workflow_dispatch:
 
 permissions:
