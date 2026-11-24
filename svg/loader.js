@@ -95,23 +95,63 @@ const KEY = () => `${base()}proxyfox.html`; // the kept copy's key in Cache Stor
 const $ = (id) => document.getElementById(id);
 const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 
-// A file of this repository: through each relay in turn, then straight from the browser.
-// Relays that failed in this page load: skipped for the files after, so each dead one costs its 3 s
-// once, not once per file.
+// A file of this repository: through the relays, then straight from the browser.
+// Relays that failed in this page load: skipped for the files after, so each dead one costs once,
+// not once per file. The relay that last worked goes first.
 const failed = new Set();
+let preferred = null;
+// The relays race to connect: the first starts at once, and each HEDGE_MS without a TLS handshake
+// done (or a failure) starts the next one too. The first to finish its handshake gets the request
+// and the others are closed, so a dead or slow relay costs HEDGE_MS instead of its whole 3 s.
+const HEDGE_MS = 500;
+function race(queue, name, progress) {
+  return new Promise((resolve) => {
+    const live = new Map(); // relay -> AbortController
+    let winner = null, timer = 0, last = null;
+    const finish = (v) => { clearTimeout(timer); resolve(v); };
+    const launch = () => {
+      clearTimeout(timer);
+      if (winner) return;
+      const relay = queue.shift();
+      if (!relay) { if (!live.size) finish({ last }); return; }
+      const ctrl = new AbortController();
+      live.set(relay, ctrl);
+      httpsGet(relay, base() + name, (n, t) => progress?.(n, t), {
+        signal: ctrl.signal,
+        onConnect: () => {
+          if (winner) { if (winner !== relay) ctrl.abort(); return; } // a redirect connects the winner again
+          winner = relay;
+          clearTimeout(timer);
+          for (const [r, c] of live) if (r !== relay) { c.abort(); queue.unshift(r); } // not their fault: kept for a retry
+        },
+      }).then((r) => {
+        live.delete(relay);
+        if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
+        preferred = relay;
+        finish({ body: r.body });
+      }).catch((e) => {
+        live.delete(relay);
+        if (ctrl.signal.aborted && winner !== relay) return; // lost the race
+        last = e;
+        if (!/GitHub answered/.test(String(e?.message))) failed.add(relay); // GitHub's own answer isn't the relay's fault
+        console.warn(`[proxyfox.svg] ${name} not through ${relay}: ${e?.message || e}`);
+        if (winner === relay) finish({ retry: true, last }); // failed after it connected: race the rest again
+        else launch();
+      });
+      timer = setTimeout(launch, HEDGE_MS);
+    };
+    launch();
+  });
+}
 async function get(name, progress) {
+  const queue = (TEST?.relays || relays()).filter((r) => !failed.has(r));
+  if (preferred && queue.includes(preferred)) queue.unshift(...queue.splice(queue.indexOf(preferred), 1));
   let last = null;
-  for (const relay of TEST?.relays || relays()) {
-    if (failed.has(relay)) continue;
-    try {
-      const r = await httpsGet(relay, base() + name, progress);
-      if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
-      return r.body;
-    } catch (e) {
-      last = e;
-      if (!/GitHub answered/.test(String(e?.message))) failed.add(relay); // GitHub's own answer isn't the relay's fault
-      console.warn(`[proxyfox.svg] ${name} not through ${relay}: ${e?.message || e}`);
-    }
+  while (queue.length) {
+    const r = await race(queue, name, progress);
+    if (r.body) return r.body;
+    last = r.last;
+    if (!r.retry) break;
   }
   if (TEST?.noDirect) throw last;
   const res = await fetch(base() + name, { cache: 'no-store' }).catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
@@ -144,7 +184,8 @@ async function latestSignature() {
 // The file the signature names, checked against it (its own address per version, so a cache
 // can't hand back another one).
 async function signedFile(sig, progress) {
-  const body = await get(`proxyfox.html?v=${sig.sha256.slice(0, 16)}`, (n) => progress?.(n, sig.size));
+  // The total is what the wire carries (gzip through a relay), or the file's size.
+  const body = await get(`proxyfox.html?v=${sig.sha256.slice(0, 16)}`, (n, total) => progress?.(n, total || sig.size));
   if (body.length !== sig.size || hex(await crypto.subtle.digest('SHA-256', body)) !== sig.sha256) {
     throw new Error('the downloaded proxyfox.html is not the signed one (an update may be going out: try again in a minute)');
   }
@@ -202,11 +243,12 @@ async function start() {
   try {
     progressBar(0, 0);
     const sig = await latestSignature();
-    void refreshRelays();
     const body = await signedFile(sig, progressBar);
     progressBar(1, 1);
-    await keep(cache, sig, body);
+    // Shown first; kept on the device (an 87 MB write) while it starts.
     show(body);
+    await keep(cache, sig, body);
+    void refreshRelays(); // after the big download, not competing with it
   } catch (e) {
     console.error(`[proxyfox.svg] Proxyfox couldn't be downloaded: ${e?.message || e}`);
     $('pf-bar').style.width = '100%';
