@@ -22,8 +22,9 @@ const u24 = (n) => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 
 // One WISP stream (id 1) over its own WebSocket. Incoming data is kept as a list of chunks and read
 // out exactly, without copying what's still waiting (an 86 MB download stays linear).
-function wispOpen(relay, host, port) {
+function wispOpen(relay, host, port, signal) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error(`${relay}: cancelled`));
     const ws = new WebSocket(relay);
     ws.binaryType = 'arraybuffer';
     const chunks = [];
@@ -42,12 +43,26 @@ function wispOpen(relay, host, port) {
     const pipe = {
       connected: () => { quietMs = 20000; },
       send: (b) => ws.send(packet(2, b)),
-      close: () => { try { ws.close(); } catch {} },
+      close: () => { closed = true; wake(); try { ws.close(); } catch {} },
+      // Bytes already here, and the first n of them without taking them (null if fewer arrived).
+      have: () => have,
+      peek(n) {
+        if (have < n) return null;
+        const out = new Uint8Array(n);
+        for (let o = 0, i = 0; o < n; i++) {
+          const c = chunks[i], take = Math.min(c.length, n - o);
+          out.set(c.subarray(0, take), o);
+          o += take;
+        }
+        return out;
+      },
       async read(n) {
         while (have < n) {
           if (closed) return null;
           // A relay that stops answering (20 s with nothing) counts as closed: the next one is tried.
-          const quiet = await new Promise((r) => { waiter = () => r(false); setTimeout(() => r(true), quietMs); });
+          let timer;
+          const quiet = await new Promise((r) => { waiter = () => r(false); timer = setTimeout(() => r(true), quietMs); });
+          clearTimeout(timer); // one pending timer per wait, not thousands over a download
           if (quiet && have < n) { closed = true; try { ws.close(); } catch {} return null; }
         }
         const out = new Uint8Array(n);
@@ -62,7 +77,13 @@ function wispOpen(relay, host, port) {
       },
     };
     const timer = setTimeout(() => { if (!opened) { ws.close(); reject(new Error(`${relay}: no answer in ${CONNECT_MS / 1000} s`)); } }, CONNECT_MS);
+    // Cancelled (another relay won the race): closes the socket; a pending read sees it closed.
+    signal?.addEventListener('abort', () => {
+      if (!opened) { clearTimeout(timer); reject(new Error(`${relay}: cancelled`)); }
+      pipe.close();
+    }, { once: true });
     ws.onopen = () => {
+      if (signal?.aborted) return;
       opened = true;
       clearTimeout(timer);
       ws.send(packet(1, cat(bytes(1, port & 255, (port >> 8) & 255), enc.encode(host))));
@@ -189,16 +210,34 @@ async function tlsConnect(pipe, host) {
   const master = await hmac(await expandLabel(hsSecret, 'derived', emptyHash, 32), zeros);
   const cAp = await Cipher.from(await expandLabel(master, 'c ap traffic', finHash, 32));
   const sAp = await Cipher.from(await expandLabel(master, 's ap traffic', finHash, 32));
+  // Records are decrypted ahead: every complete record already received is handed to WebCrypto at
+  // once (nonces are taken in order when each decrypt starts), so decryption runs in parallel with
+  // the download instead of one awaited record at a time.
+  const pending = [];
+  let eof = false;
+  const recordReady = () => {
+    const h = pipe.peek(5);
+    return h !== null && pipe.have() >= 5 + ((h[3] << 8) | h[4]);
+  };
+  const fill = async () => {
+    while (!eof && pending.length < 64 && (!pending.length || recordReady())) {
+      const r = await readRecord(pipe);
+      if (!r) { eof = true; break; }
+      if (r.type !== 23) continue;
+      const p = sAp.open(r.head, r.body);
+      p.catch(() => {}); // a record left behind (the body ended earlier) mustn't be an unhandled rejection
+      pending.push(p);
+    }
+  };
   return {
     write: async (data) => { for (let i = 0; i < data.length; i += 16384) pipe.send(await cAp.seal(23, data.subarray(i, i + 16384))); },
     async read() {
       for (;;) {
-        const r = await readRecord(pipe);
-        if (!r) return null;
-        if (r.type !== 23) continue;
-        const [t, inner] = await sAp.open(r.head, r.body);
+        await fill();
+        if (!pending.length) return null;
+        const [t, inner] = await pending.shift();
         if (t === 23) return inner;
-        if (t === 21) return null; // close_notify
+        if (t === 21) { eof = true; pending.length = 0; return null; } // close_notify
       }
     },
   };
@@ -223,16 +262,37 @@ function dechunk(b) {
   return cat(...parts);
 }
 
+// Ask for gzip where the browser can undo it: GitHub's file servers send proxyfox.html (Base64,
+// 87 MB) as about 65 MB of gzip, a quarter less through the relay.
+const GZIP = typeof DecompressionStream === 'function';
+// Undoes gzip as the data arrives, so it overlaps the download instead of following it.
+function gunzipper() {
+  const ds = new DecompressionStream('gzip');
+  const w = ds.writable.getWriter();
+  const out = new Response(ds.readable).arrayBuffer();
+  out.catch(() => {});
+  return {
+    push: (c) => { w.write(c).catch(() => {}); },
+    end: async () => { await w.close(); return new Uint8Array(await out); },
+    abort: () => { w.abort().catch(() => {}); },
+  };
+}
+
 // GET an https:// URL through `relay`. Resolves to { status, body: Uint8Array }; progress(got, total)
-// is told as the body arrives. Follows redirects; a body shorter than its Content-Length fails.
-export async function httpsGet(relay, href, progress, redirects = 5) {
+// is told as the body arrives (bytes on the wire: compressed, when the server compressed it).
+// Follows redirects; a body shorter than its Content-Length fails.
+// opts.signal cancels it; opts.onConnect() is called once the TLS handshake with the site is done.
+export async function httpsGet(relay, href, progress, opts = {}, redirects = 5) {
   const url = new URL(href);
-  const pipe = await wispOpen(relay, url.hostname, Number(url.port) || 443);
+  const pipe = await wispOpen(relay, url.hostname, Number(url.port) || 443, opts.signal);
+  let unzip = null;
   try {
     const tls = await tlsConnect(pipe, url.hostname);
+    if (opts.signal?.aborted) throw new Error(`${relay}: cancelled`);
     pipe.connected();
+    opts.onConnect?.();
     await tls.write(enc.encode(`GET ${url.pathname}${url.search} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: Mozilla/5.0\r\n` +
-      'Accept: */*\r\nAccept-Encoding: identity\r\n\r\n'));
+      `Accept: */*\r\nAccept-Encoding: ${GZIP ? 'gzip' : 'identity'}\r\n\r\n`));
     let head = null, start = new Uint8Array(0), headers = {}, status = 0, total = 0, got = 0;
     const parts = [];
     for (let c; (c = await tls.read()) !== null;) {
@@ -247,9 +307,11 @@ export async function httpsGet(relay, href, progress, redirects = 5) {
           if (k > 0) headers[line.slice(0, k).trim().toLowerCase()] = line.slice(k + 1).trim();
         }
         total = Number(headers['content-length']) || 0;
+        // Plain (not chunked) gzip: undone while it downloads. Chunked gzip is undone at the end.
+        if (GZIP && /gzip/.test(headers['content-encoding'] || '') && !headers['transfer-encoding']) unzip = gunzipper();
         c = start.subarray(end + CRLF2.length);
       }
-      parts.push(c);
+      if (unzip) unzip.push(c); else parts.push(c);
       got += c.length;
       progress?.(got, total);
       // The whole body is here: done, without waiting for the server to close (some relays drop
@@ -262,13 +324,22 @@ export async function httpsGet(relay, href, progress, redirects = 5) {
     if (!head) throw new Error('no HTTP answer');
     if ([301, 302, 303, 307, 308].includes(status) && headers.location) {
       if (redirects <= 0) throw new Error('too many redirects');
-      return httpsGet(relay, new URL(headers.location, url).href, progress, redirects - 1);
+      return httpsGet(relay, new URL(headers.location, url).href, progress, opts, redirects - 1);
     }
-    let body = cat(...parts);
-    if ((headers['transfer-encoding'] || '').includes('chunked')) body = dechunk(body);
-    else if (total && body.length !== total) throw new Error(`got ${body.length} of ${total} bytes`);
+    if (opts.signal?.aborted) throw new Error(`${relay}: cancelled`);
+    const chunked = (headers['transfer-encoding'] || '').includes('chunked');
+    if (!chunked && total && got !== total) throw new Error(`got ${got} of ${total} bytes`);
+    if (unzip) { const body = await unzip.end(); unzip = null; return { status, body }; }
+    let body = parts.length === 1 ? parts[0] : cat(...parts);
+    if (chunked) body = dechunk(body);
+    if (/gzip/.test(headers['content-encoding'] || '')) {
+      const z = gunzipper();
+      z.push(body);
+      body = await z.end();
+    }
     return { status, body };
   } finally {
+    unzip?.abort();
     pipe.close();
   }
 }
