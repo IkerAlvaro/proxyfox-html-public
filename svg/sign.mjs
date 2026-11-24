@@ -31,5 +31,31 @@ if (!pem || !pem.includes('PRIVATE KEY')) {
 const file = fs.readFileSync(path.join(ROOT, 'proxyfox.html'));
 const sha256 = crypto.createHash('sha256').update(file).digest('hex');
 const signature = crypto.sign('sha256', Buffer.from(message(sha256, file.length)), { key: pem, dsaEncoding: 'ieee-p1363' }).toString('base64');
-fs.writeFileSync(path.join(ROOT, 'proxyfox.html.sig'), JSON.stringify({ format: 1, file: 'proxyfox.html', sha256, size: file.length, signature }, null, 1) + '\n');
-console.log(`sign: proxyfox.html.sig for ${sha256.slice(0, 16)}... (${file.length} bytes)`);
+const parts = partsOf(file);
+fs.writeFileSync(path.join(ROOT, 'proxyfox.html.sig'), JSON.stringify({ format: 1, file: 'proxyfox.html', sha256, size: file.length, signature, parts }, null, 1) + '\n');
+console.log(`sign: proxyfox.html.sig for ${sha256.slice(0, 16)}... (${file.length} bytes, ${parts.length} parts)`);
+
+// The file's parts, for partial updates (svg/loader.js): each embedded asset's Base64 is a part, and
+// so is the page text between them. An update downloads only the parts whose hash changed; the rest
+// comes from the copy the loader keeps. Not signed itself: the rebuilt file is checked against the
+// signed SHA-256, so a wrong list only costs a full download. svg/loader.js (partsOf) cuts the same way.
+function partsOf(buf) {
+  const OPEN = Buffer.from('<script type="application/octet-stream" data-asset="');
+  const cuts = [0];
+  for (let pos = 0; ;) {
+    const tag = buf.indexOf(OPEN, pos);
+    if (tag < 0) break;
+    const start = buf.indexOf(0x3e, tag + OPEN.length) + 1; // after the tag's '>'
+    const end = buf.indexOf(0x3c, start); // Base64 has no '<': the next one opens </script>
+    if (start <= 0 || end < 0) break;
+    cuts.push(start, end);
+    pos = end;
+  }
+  cuts.push(buf.length);
+  const parts = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const at = cuts[i], len = cuts[i + 1] - cuts[i];
+    if (len > 0) parts.push({ at, len, sha256: crypto.createHash('sha256').update(buf.subarray(at, at + len)).digest('hex') });
+  }
+  return parts;
+}
