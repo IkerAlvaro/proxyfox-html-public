@@ -250,28 +250,28 @@ function withoutAssets(buildId, names) {
         const m = find(buf, MANIFEST_TAG, pos);
         if (m === -1) break;
         const end = buf.indexOf(LT, m + MANIFEST_TAG.length); // the JSON has no "<" (pack.mjs escapes it)
-        if (end === -1) { out.enqueue(buf.slice(pos, m)); pos = m; waiting = true; break; }
+        if (end === -1) { out.enqueue(buf.subarray(pos, m)); pos = m; waiting = true; break; }
         const manifest = JSON.parse(dec.decode(buf.subarray(m + MANIFEST_TAG.length, end)));
         if (manifest?.build?.buildId !== buildId) throw new Error('not the build whose engine files this device keeps');
         checked = true;
-        out.enqueue(buf.slice(pos, end));
+        out.enqueue(buf.subarray(pos, end));
         pos = end;
         continue;
       }
       const t = find(buf, ASSET_TAG, pos);
       if (t === -1) break;
       const close = buf.indexOf(GT, t + ASSET_TAG.length);
-      if (close === -1) { out.enqueue(buf.slice(pos, t)); pos = t; waiting = true; break; }
+      if (close === -1) { out.enqueue(buf.subarray(pos, t)); pos = t; waiting = true; break; }
       const name = dec.decode(buf.subarray(t + ASSET_TAG.length, close)).split('"')[0];
-      out.enqueue(buf.slice(pos, close + 1));
+      out.enqueue(buf.subarray(pos, close + 1));
       pos = close + 1;
       if (names.has(name)) skipping = true;
     }
     if (!skipping && !waiting) {
       const upTo = final ? buf.length : Math.max(pos, buf.length - TAIL);
-      if (upTo > pos) { out.enqueue(buf.slice(pos, upTo)); pos = upTo; }
+      if (upTo > pos) { out.enqueue(buf.subarray(pos, upTo)); pos = upTo; }
     }
-    buf = buf.slice(pos);
+    buf = buf.subarray(pos); // never written to: views instead of copies (chunks are new arrays)
   };
   return new TransformStream({
     transform(chunk, out) {
