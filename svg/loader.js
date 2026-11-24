@@ -292,11 +292,15 @@ async function lighten(full) {
   }
 }
 
-async function show(body) {
+let running = ''; // the SHA-256 of the proxyfox.html the frame runs
+async function show(body, sha256 = '') {
   const frame = $('pf-frame');
   frame.name = `proxyfox-filter:${chosen}`;
   const full = body instanceof Blob ? body : new Blob([body], { type: 'text/html' });
+  const old = frame.src;
+  running = sha256;
   frame.src = URL.createObjectURL(await lighten(full));
+  if (old.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 10000);
   frame.addEventListener('load', () => {
     $('pf-progress').style.display = 'none';
     try { frame.focus(); } catch {}
@@ -311,6 +315,42 @@ function registerAppWorker() {
     .catch((e) => console.warn('[proxyfox.svg] app worker not registered:', e?.message || e));
 }
 
+// Update now (Proxyfox's Check for updates, inside this frame): Proxyfox can't replace itself here, so
+// it asks this page, which gets the newest signed proxyfox.html (the one the background check already
+// downloaded, or now, through the relays), keeps it and restarts the frame with it. Proxyfox shows the
+// progress it's sent: proxyfox-update-started, -progress { got, total }, -ready, -none, -error { message }.
+let background = null; // the background update check of this open (start)
+let backgroundProgress = null; // set while Update now waits for that download
+let updating = false;
+addEventListener('message', async (e) => {
+  const frame = $('pf-frame');
+  if (e.source !== frame.contentWindow || e.data?.type !== 'proxyfox-update' || updating) return;
+  const tell = (m) => { try { frame.contentWindow?.postMessage(m, '*'); } catch {} };
+  updating = true;
+  tell({ type: 'proxyfox-update-started' });
+  try {
+    const progress = (got, total) => tell({ type: 'proxyfox-update-progress', got, total });
+    backgroundProgress = progress;
+    await background; // a download already going: let it finish instead of starting a second
+    const sig = await latestSignature();
+    if (sig.sha256 === running) { tell({ type: 'proxyfox-update-none' }); return; }
+    const cache = await openCache();
+    const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
+    let body = kept && kept.headers.get('X-Sha256') === sig.sha256 ? await kept.blob() : null;
+    if (!body) {
+      body = await signedFile(sig, (n, total) => progress(n, total || sig.size));
+      await keep(cache, sig, body);
+    }
+    tell({ type: 'proxyfox-update-ready' });
+    await show(body, sig.sha256);
+  } catch (err) {
+    tell({ type: 'proxyfox-update-error', message: err?.message || String(err) });
+  } finally {
+    backgroundProgress = null;
+    updating = false;
+  }
+});
+
 async function start() {
   registerAppWorker();
   await chooseFilter();
@@ -318,18 +358,17 @@ async function start() {
   const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
   if (kept) {
     progressBar(1, 1);
-    await show(await kept.blob());
-    // A newer signed file for the next open, in the background.
-    try {
+    await show(await kept.blob(), kept.headers.get('X-Sha256') || '');
+    // A newer signed file for the next open, in the background (Update now in Proxyfox uses it).
+    background = (async () => {
       const sig = await latestSignature();
       void refreshRelays();
       if (sig.sha256 !== kept.headers.get('X-Sha256')) {
-        await keep(cache, sig, await signedFile(sig));
+        await keep(cache, sig, await signedFile(sig, (n, total) => backgroundProgress?.(n, total)));
         console.log('[proxyfox.svg] a newer Proxyfox was downloaded; it opens next time');
       }
-    } catch (e) {
-      console.warn('[proxyfox.svg] update check failed:', e?.message || e);
-    }
+    })().catch((e) => console.warn('[proxyfox.svg] update check failed:', e?.message || e));
+    await background;
     return;
   }
   try {
@@ -345,7 +384,7 @@ async function start() {
     const body = await signedFile(sig, progressBar, await early);
     progressBar(1, 1);
     // Shown first; kept on the device (an 87 MB write) while it starts.
-    await show(body);
+    await show(body, sig.sha256);
     await keep(cache, sig, body);
     void refreshRelays(); // after the big download, not competing with it
   } catch (e) {
