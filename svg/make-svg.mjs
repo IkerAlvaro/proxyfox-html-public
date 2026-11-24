@@ -83,6 +83,8 @@ const html = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Proxyfox</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,${ICON}">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#131211">
 <style>html, body { margin: 0; height: 100%; background: #131211; overflow: hidden; }</style>
 </head>
 <body>
