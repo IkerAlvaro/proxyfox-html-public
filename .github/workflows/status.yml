@@ -1,0 +1,37 @@
+# Updates the release status in the #updates Discord channel after every push to main here (and after
+# the sign and loader-build workflows, whose own commits can't start workflows): it runs the private
+# repository's Release status workflow (release.yml), which reads production from this repository.
+#
+# Repository secret (Settings > Secrets and variables > Actions):
+#   STATUS_TOKEN  a fine-grained GitHub token, resource owner The-Unblocked-Initiative-Repo-Access,
+#                 repository proxyfox only, permission Actions: Read and write
+name: Release status
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [Sign proxyfox.html, Build the loader]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-status
+  cancel-in-progress: true
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run the private repository's Release status
+        env:
+          STATUS_TOKEN: ${{ secrets.STATUS_TOKEN }}
+        run: |
+          if [ -z "$STATUS_TOKEN" ]; then echo "::warning::Add the STATUS_TOKEN secret to update the Discord status from here."; exit 0; fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $STATUS_TOKEN" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/The-Unblocked-Initiative-Repo-Access/proxyfox/actions/workflows/release.yml/dispatches \
+            -d '{"ref":"main"}'
+          echo "Release status started."
