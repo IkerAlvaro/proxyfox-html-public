@@ -255,7 +255,28 @@ async function show(body) {
   }, { once: true });
 }
 
+// Multi-threading (and a saved profile) needs this page to be cross-origin isolated, which takes
+// COOP/COEP headers that hosts like GitHub Pages can't send. Where the site has sw.js (it adds
+// them to everything it serves), it is registered and the page reloads once under it. Elsewhere
+// (another host, a file) Proxyfox runs single-threaded, as before.
+async function isolate() {
+  if (globalThis.crossOriginIsolated || TEST || !/^https?:$/.test(location.protocol) || !navigator.serviceWorker) return;
+  const FLAG = 'proxyfox-svg-isolating';
+  try {
+    if (sessionStorage.getItem(FLAG)) { sessionStorage.removeItem(FLAG); return; } // reloaded once already
+    const reg = await navigator.serviceWorker.register(new URL('sw.js', location.href).href);
+    await navigator.serviceWorker.ready;
+    if (!reg.active) return;
+    sessionStorage.setItem(FLAG, '1');
+    location.reload();
+    await new Promise(() => {}); // the reload takes over
+  } catch (e) {
+    console.log(`[proxyfox.svg] single-threaded: no isolation here (${e?.message || e})`);
+  }
+}
+
 async function start() {
+  await isolate();
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
   if (kept) {
