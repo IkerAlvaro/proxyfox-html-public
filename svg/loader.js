@@ -14,7 +14,10 @@
 // saved profile need the page showing this SVG to be cross-origin isolated; the frame inherits it.
 import { httpsGet } from './tls.js';
 
-const BASE = 'https://raw.githubusercontent.com/The-Unblocked-Initiative-Repo-Access/proxyfox-html-public/main/';
+// This fork: its proxyfox.html is upstream's, repacked smaller (svg/repack.mjs) and signed with this
+// fork's own key (svg/sync.mjs and the sync workflow bring each upstream update, checked against
+// upstream's signature first).
+const BASE = 'https://raw.githubusercontent.com/IkerAlvaro/proxyfox-html-public/main/';
 // The relays, tried top to bottom for each request: the next one only when one refuses, fails or
 // stops answering. Built in from wisps.json (svg/make-svg.mjs); once a download worked, the
 // repository's newest wisps.json is kept (localStorage) and used from the next open, followed by
@@ -36,7 +39,7 @@ async function refreshRelays() {
   }
 }
 // svg/sign.mjs --new-key prints this (and the private key, for the PROXYFOX_SIGNING_KEY secret).
-const PUBLIC_KEY = { kty: 'EC', crv: 'P-256', x: 'g6ninswrJTM9o-G1PSQXPRAXvrOILC7-fVOIVR8plng', y: 'x9iac4XTqmRNVRoynlrAeW1nkSoyyL4ijBX5LL0Xiz8' };
+const PUBLIC_KEY = { kty: 'EC', crv: 'P-256', x: 'F9DMZJGSyjzr4HIaitH_0YCM4D_ufSrjzwO8l_CGzG0', y: 'FWZ-pkIYvPTXQww8JdkBM7CdIf4cQa-rvJBd2Ef9fi4' };
 const CACHE = 'proxyfox-svg';
 const TEST = globalThis.__proxyfoxSvgTest || null; // local tests only: { base, relays, noDirect }
 const base = () => TEST?.base || BASE;
