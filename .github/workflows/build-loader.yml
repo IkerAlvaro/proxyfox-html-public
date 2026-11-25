@@ -1,0 +1,37 @@
+# Rebuilds loader.svg and loader.html (svg/make-svg.mjs) whenever wisps.json or the loader's source
+# changes on main, and commits them: the relay lists per filter are built into the loader, so a new
+# wisps.json (copied here from the private repository by its wisps-sync workflow) reaches the loader
+# without anyone running the build by hand.
+name: Build the loader
+
+on:
+  push:
+    branches: [main]
+    paths: [wisps.json, svg/loader.js, svg/tls.js, svg/make-svg.mjs, svg/icon32.png]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-loader
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - name: Commit
+        run: |
+          if git diff --quiet -- loader.svg loader.html; then echo "The loader is already up to date."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add loader.svg loader.html
+          git commit -m "Build the loader (${GITHUB_SHA::7})"
+          git push
