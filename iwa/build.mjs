@@ -175,7 +175,10 @@ for (let i = 0, n = ico.readUInt16LE(4); i < n; i++) {
 }
 if (!icons.length) fail('favicon.ico has no PNG image for the app icon');
 const b = manifest.build || {};
-const version = `${b.update?.id ?? 0}.${(b.date || '1970-01-01').replace(/-/g, '')}.0`;
+// The last number is this fork's own revision of the bundle for the same upstream build: raise it when
+// iwa/ changes without a new proxyfox.html, or installed copies would not take the new bundle.
+const IWA_REVISION = 1;
+const version = `${b.update?.id ?? 0}.${(b.date || '1970-01-01').replace(/-/g, '')}.${IWA_REVISION}`;
 const webManifest = {
   name: b.brandName || 'Proxyfox',
   short_name: b.brandName || 'Proxyfox',
@@ -187,6 +190,8 @@ const webManifest = {
   update_manifest_url: `${SITE}update.json`,
   display: 'standalone',
   display_override: ['standalone'],
+  // One window: a second launch focuses the open one instead of loading another 600 MB engine.
+  launch_handler: { client_mode: 'focus-existing' },
   background_color: '#131211',
   theme_color: '#131211',
   icons,
@@ -204,6 +209,9 @@ const webManifest = {
     geolocation: ['self'],
     'publickey-credentials-get': ['self'],
     'publickey-credentials-create': ['self'],
+    'keyboard-lock': ['self'], // Ctrl+T, Ctrl+W, Ctrl+Tab ... go to Firefox, not to the browser hosting the app
+    'screen-wake-lock': ['self'], // the screen stays on while Proxyfox is in use (video, reading)
+    'window-management': ['self'], // full screen on the display the person chooses
   },
 };
 const wm = [Buffer.from(JSON.stringify(webManifest, null, 2)), 'application/manifest+json'];

@@ -33,6 +33,30 @@
   // relay, so there is nothing to order: leave it chosen (a choice already made is kept).
   try { if (!localStorage.getItem('proxyfox-filter')) localStorage.setItem('proxyfox-filter', 'Not sure'); } catch {}
 
+  // --- What an installed app can do that a tab can't --------------------------------------------------
+  // Everything here is best effort: a browser that refuses leaves Proxyfox exactly as it was.
+  addEventListener('DOMContentLoaded', () => {
+    // Screen wake lock: kept while the window is visible (the browser drops it when it is hidden).
+    let lock = null;
+    const hold = async () => {
+      try {
+        if (document.visibilityState !== 'visible' || lock || !navigator.wakeLock) return;
+        lock = await navigator.wakeLock.request('screen');
+        lock.addEventListener('release', () => { lock = null; });
+      } catch { lock = null; }
+    };
+    document.addEventListener('visibilitychange', hold);
+    // Keyboard lock: the browser's own shortcuts (new tab, close tab, next tab ...) reach Firefox. The
+    // browser allows it in full screen and in standalone windows; asked again when full screen changes.
+    const grab = () => {
+      try {
+        navigator.keyboard?.lock(['KeyT', 'KeyW', 'KeyN', 'KeyL', 'KeyR', 'KeyD', 'KeyF', 'KeyK', 'Tab', 'Escape', 'F5', 'F11']).catch(() => {});
+      } catch {}
+    };
+    addEventListener('pointerdown', () => { hold(); grab(); }, { once: true });
+    document.addEventListener('fullscreenchange', grab);
+  });
+
   const NativeWebSocket = self.WebSocket;
   const T = { CONNECT: 1, DATA: 2, CONTINUE: 3, CLOSE: 4, INFO: 5 };
   const R = { VOLUNTARY: 0x02, NETWORK: 0x03, UNREACHABLE: 0x42, REFUSED: 0x44 };
