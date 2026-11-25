@@ -6,7 +6,8 @@
 //
 // A patch file exports (default) an array of
 //   { name, target, from, to, count? }
-//   target: 'app'  the page's module script (the app: options, paint, input, wisp client, ...)
+//   target: 'page' the page's markup before the asset manifest (the launch page, Options)
+//           'app'  the page's module script (the app: options, paint, input, wisp client, ...)
 //           'glue' gecko.js, the engine's JavaScript (as the page has it AFTER its own GLUE_PATCHES)
 //   from/to: exact text; `from` must occur `count` times (default 1). A patch whose `from` is gone
 //           and whose `to` is there is taken as already applied, so running this twice is fine.
@@ -52,6 +53,7 @@ const OPEN = '<script type="module">';
 const modAt = html.lastIndexOf(OPEN), modEnd = html.lastIndexOf('</script>');
 if (modAt < 0 || modEnd < modAt) fail('no module script');
 let app = html.slice(modAt + OPEN.length, modEnd);
+let page = html.slice(0, mm.index);
 
 const GECKO = /(<script type="application\/octet-stream" data-asset="gecko\.js" data-encoding="base64">)([^<]*)(<\/script>)/;
 const gm = GECKO.exec(html) || fail('no gecko.js block');
@@ -59,11 +61,11 @@ const ga = manifest.assets['gecko.js'];
 const storedGlue = Buffer.from(gm[2], 'base64');
 let glue = (ga.compression === 'zstd' ? zstd(['-q', '-d', '-f'], storedGlue) : storedGlue).toString('utf8');
 
-const targets = { app: () => app, glue: () => glue };
-const set = { app: (v) => { app = v; }, glue: (v) => { glue = v; } };
+const targets = { page: () => page, app: () => app, glue: () => glue };
+const set = { page: (v) => { page = v; }, app: (v) => { app = v; }, glue: (v) => { glue = v; } };
 let applied = 0, already = 0;
 for (const p of patches) {
-  if (!targets[p.target]) fail(`${p.file}: "${p.name}" has no target app/glue`);
+  if (!targets[p.target]) fail(`${p.file}: "${p.name}" has no target page/app/glue`);
   const src = targets[p.target](), want = p.count ?? 1;
   const n = count(src, p.from), done = count(src, p.to);
   // Already applied: `to` is there and `from` is gone, or `to` contains `from` (then `from` stays after a
@@ -89,7 +91,8 @@ for (const p of patches) {
 console.log(`patch: ${applied} applied, ${already} already there, ${patches.length} in svg/patches`);
 if (CHECK) { fs.rmSync(tmp, { recursive: true, force: true }); process.exit(0); }
 
-let out = html.slice(0, modAt + OPEN.length) + app + html.slice(modEnd);
+if (page.includes('<script type="application/json" id="asset-manifest">')) fail('a page patch reached into the asset manifest');
+let out = page + html.slice(mm.index, modAt + OPEN.length) + app + html.slice(modEnd);
 if (glue !== (ga.compression === 'zstd' ? zstd(['-q', '-d', '-f'], storedGlue) : storedGlue).toString('utf8')) {
   const raw = Buffer.from(glue, 'utf8');
   const packed = zstd(['-q', '-f', '--ultra', '-19'], raw);

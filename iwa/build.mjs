@@ -177,7 +177,7 @@ if (!icons.length) fail('favicon.ico has no PNG image for the app icon');
 const b = manifest.build || {};
 // The last number is this fork's own revision of the bundle for the same upstream build: raise it when
 // iwa/ changes without a new proxyfox.html, or installed copies would not take the new bundle.
-const IWA_REVISION = 1;
+const IWA_REVISION = 2;
 const version = `${b.update?.id ?? 0}.${(b.date || '1970-01-01').replace(/-/g, '')}.${IWA_REVISION}`;
 const webManifest = {
   name: b.brandName || 'Proxyfox',
