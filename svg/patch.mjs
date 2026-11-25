@@ -65,8 +65,10 @@ let applied = 0, already = 0;
 for (const p of patches) {
   if (!targets[p.target]) fail(`${p.file}: "${p.name}" has no target app/glue`);
   const src = targets[p.target](), want = p.count ?? 1;
-  const n = count(src, p.from);
-  if (n === 0 && count(src, p.to) >= want) { already++; continue; }
+  const n = count(src, p.from), done = count(src, p.to);
+  // Already applied: `to` is there and `from` is gone, or `to` contains `from` (then `from` stays after a
+  // patch, and applying it again would nest the change in itself).
+  if (done >= want && (n === 0 || p.to.includes(p.from))) { already++; continue; }
   if (n !== want) fail(`${p.file}: "${p.name}" matches ${n} times in ${p.target}, expected ${want}`);
   set[p.target](src.split(p.from).join(p.to));
   applied++;
