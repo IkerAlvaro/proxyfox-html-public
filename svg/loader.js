@@ -14,29 +14,79 @@
 // saved profile need the page showing this SVG to be cross-origin isolated; the frame inherits it.
 import { httpsGet } from './tls.js';
 
-// This fork: its proxyfox.html is upstream's, repacked smaller (svg/repack.mjs) and signed with this
-// fork's own key (svg/sync.mjs and the sync workflow bring each upstream update, checked against
-// upstream's signature first).
+// This fork: its proxyfox.html is upstream's, patched and repacked (svg/patch.mjs, svg/repack.mjs) and
+// signed with this fork's own key (svg/sync.mjs brings each upstream update, checked against upstream's
+// signature first).
 const BASE = 'https://raw.githubusercontent.com/IkerAlvaro/proxyfox-html-public/main/';
-// The relays, tried top to bottom for each request: the next one only when one refuses, fails or
-// stops answering. Built in from wisps.json (svg/make-svg.mjs); once a download worked, the
-// repository's newest wisps.json is kept (localStorage) and used from the next open, followed by
-// the built-in ones it doesn't list.
+// The relays, per web filter ({ "GoGuardian": [relays], ..., "Not sure": [...] }; an old plain list is
+// one filter). The person picks their filter (Choose your filter, the first time), and for each
+// request its relays are tried top to bottom, then the other filters': the next one only when one
+// refuses, fails or stops answering. Built in from wisps.json (svg/make-svg.mjs); once a download
+// worked, the repository's newest wisps.json is kept (localStorage) and used from the next open,
+// followed by the built-in relays it doesn't list. The chosen filter is kept under the name
+// Proxyfox reads too (proxyfox-filter), and the frame is named after it for a loader opened from a
+// file, so Proxyfox doesn't ask again.
 const BUILT_IN = __WISPS__;
 const WISPS_KEY = 'proxyfox-svg-wisps';
+const FILTER_KEY = 'proxyfox-filter';
 const isRelay = (u) => typeof u === 'string' && /^wss?:\/\/[^\s"]+$/.test(u);
+function parseFilters(data) {
+  if (Array.isArray(data)) data = { 'All relays': data };
+  if (!data || typeof data !== 'object') return null;
+  const out = {};
+  for (const [name, list] of Object.entries(data)) {
+    const urls = Array.isArray(list) ? [...new Set(list.filter(isRelay))] : [];
+    if (name.trim() && urls.length) out[name.trim()] = urls;
+  }
+  return Object.keys(out).length ? out : null;
+}
+function filters() {
+  try { return parseFilters(JSON.parse(localStorage.getItem(WISPS_KEY) || 'null')) || BUILT_IN; } catch { return BUILT_IN; }
+}
+let chosen = '';
 function relays() {
-  let kept = [];
-  try { kept = JSON.parse(localStorage.getItem(WISPS_KEY) || '[]'); } catch {}
-  return [...new Set([...(Array.isArray(kept) ? kept.filter(isRelay) : []), ...BUILT_IN])];
+  const f = filters();
+  return [...new Set([...(f[chosen] || []), ...Object.values(f).flat(), ...Object.values(BUILT_IN).flat()])];
 }
 async function refreshRelays() {
   try {
     const list = JSON.parse(new TextDecoder().decode(await get(`wisps.json?t=${Date.now()}`)));
-    if (Array.isArray(list) && list.length && list.every(isRelay)) localStorage.setItem(WISPS_KEY, JSON.stringify(list));
+    if (parseFilters(list)) localStorage.setItem(WISPS_KEY, JSON.stringify(list));
   } catch (e) {
     console.warn('[proxyfox.svg] wisps.json not updated:', e?.message || e);
   }
+}
+// The filter: the kept one if the list still has it, the only one if there is just one, else asked.
+async function chooseFilter() {
+  const names = Object.keys(filters());
+  let name = '';
+  try { name = localStorage.getItem(FILTER_KEY) || ''; } catch {}
+  if (!names.includes(name)) name = names.length === 1 ? names[0] : await askFilter(names);
+  try { localStorage.setItem(FILTER_KEY, name); } catch {}
+  chosen = name;
+}
+function askFilter(names) {
+  const select = $('pf-filter-select'), go = $('pf-filter-go');
+  const option = (value, text) => {
+    const o = document.createElementNS('http://www.w3.org/1999/xhtml', 'option'); // an SVG page has no new Option()
+    o.value = value;
+    o.textContent = text;
+    return o;
+  };
+  select.replaceChildren(option('', 'Select your filter'), ...names.map((n) => option(n, n)));
+  select.firstChild.disabled = true;
+  select.value = '';
+  go.disabled = true;
+  go.style.opacity = '.5';
+  $('pf-filter').style.display = 'flex';
+  return new Promise((resolve) => {
+    select.onchange = () => { go.disabled = !select.value; go.style.opacity = select.value ? '1' : '.5'; };
+    go.onclick = () => {
+      if (!select.value) return;
+      $('pf-filter').style.display = 'none';
+      resolve(select.value);
+    };
+  });
 }
 // svg/sign.mjs --new-key prints this (and the private key, for the PROXYFOX_SIGNING_KEY secret).
 const PUBLIC_KEY = { kty: 'EC', crv: 'P-256', x: 'F9DMZJGSyjzr4HIaitH_0YCM4D_ufSrjzwO8l_CGzG0', y: 'FWZ-pkIYvPTXQww8JdkBM7CdIf4cQa-rvJBd2Ef9fi4' };
@@ -57,7 +107,7 @@ let preferred = null;
 // done (or a failure) starts the next one too. The first to finish its handshake gets the request
 // and the others are closed, so a dead or slow relay costs HEDGE_MS instead of its whole 3 s.
 const HEDGE_MS = 500;
-function race(queue, name, progress) {
+function race(queue, name, progress, range) {
   return new Promise((resolve) => {
     const live = new Map(); // relay -> AbortController
     let winner = null, timer = 0, last = null;
@@ -71,6 +121,7 @@ function race(queue, name, progress) {
       live.set(relay, ctrl);
       httpsGet(relay, base() + name, (n, t) => progress?.(n, t), {
         signal: ctrl.signal,
+        range,
         onConnect: () => {
           if (winner) { if (winner !== relay) ctrl.abort(); return; } // a redirect connects the winner again
           winner = relay;
@@ -79,7 +130,8 @@ function race(queue, name, progress) {
         },
       }).then((r) => {
         live.delete(relay);
-        if (r.status !== 200) throw new Error(`GitHub answered ${r.status}`);
+        if (r.status !== (range ? 206 : 200)) throw new Error(`GitHub answered ${r.status}`);
+        if (range && !String(r.headers?.['content-range'] || '').startsWith(`bytes ${range[0]}-${range[1]}/`)) throw new Error('GitHub answered another range');
         preferred = relay;
         finish({ body: r.body });
       }).catch((e) => {
@@ -96,28 +148,30 @@ function race(queue, name, progress) {
     launch();
   });
 }
-async function viaRelays(name, progress) {
+async function viaRelays(name, progress, range) {
   const queue = (TEST?.relays || relays()).filter((r) => !failed.has(r));
   if (preferred && queue.includes(preferred)) queue.unshift(...queue.splice(queue.indexOf(preferred), 1));
   let last = new Error('no relay left to try');
   while (queue.length) {
-    const r = await race(queue, name, progress);
+    const r = await race(queue, name, progress, range);
     if (r.body) return r.body;
     last = r.last;
     if (!r.retry) break;
   }
   throw last;
 }
-async function get(name, progress) {
+// range = [first, last]: only those bytes (partial updates).
+async function get(name, progress, range) {
   let last = null;
   try {
-    return await viaRelays(name, progress);
+    return await viaRelays(name, progress, range);
   } catch (e) {
     last = e;
   }
   if (TEST?.noDirect) throw last;
-  const res = await fetch(base() + name, { cache: 'no-store' }).catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
-  if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+  const res = await fetch(base() + name, { cache: 'no-store', headers: range ? { Range: `bytes=${range[0]}-${range[1]}` } : {} })
+    .catch((e) => { throw new Error(`no relay got it (${last?.message}), nor GitHub directly (${e.message})`); });
+  if (res.status !== (range ? 206 : 200)) throw new Error(`GitHub answered ${res.status}`);
   // Read as it arrives, so the loading bar moves on this path too (signedFile gives the total).
   const reader = res.body.getReader(), parts = [];
   let got = 0;
@@ -157,13 +211,116 @@ async function signedFile(sig, progress, body = null) {
   return body;
 }
 
+// ------------------------------------------------------------------- partial updates --
+// An update for a device that keeps an older proxyfox.html downloads only the parts that changed.
+// proxyfox.html.sig lists the new file's parts (svg/sign.mjs: each embedded asset's Base64, and the
+// page text between them) with their hashes; parts the kept copy has are taken from it, the others
+// are downloaded by byte range, and the rebuilt file must match the signed SHA-256 like any other
+// download. An app-only update is about 2 MB instead of the whole 67 MB. If anything doesn't work
+// out, the whole file is downloaded.
+const PART_GAP = 512 * 1024; // changed parts closer than this are one request (the bytes between too)
+const ASSET_OPEN = '<script type="application/octet-stream" data-asset="';
+function validParts(sig) {
+  if (!Array.isArray(sig.parts) || !sig.parts.length || sig.parts.length > 1000) return false;
+  let at = 0;
+  for (const p of sig.parts) {
+    if (p?.at !== at || !Number.isInteger(p.len) || p.len <= 0 || !/^[0-9a-f]{64}$/.test(p.sha256)) return false;
+    at += p.len;
+  }
+  return at === sig.size;
+}
+// The parts of a kept copy from before parts were kept with it: cut the way svg/sign.mjs cuts.
+async function partsOf(blob) {
+  const CH = 1 << 22;
+  const cuts = [0];
+  for (let pos = 0; pos < blob.size;) {
+    const text = await ascii(blob, pos, Math.min(blob.size, pos + CH));
+    const tag = text.indexOf(ASSET_OPEN);
+    const gt = tag < 0 ? -1 : text.indexOf('>', tag + ASSET_OPEN.length);
+    if (gt < 0) {
+      if (pos + CH >= blob.size) break;
+      pos = tag > 0 ? pos + tag : pos + CH - ASSET_OPEN.length; // a tag cut by the chunk's end is read again whole
+      continue;
+    }
+    const start = pos + gt + 1;
+    let end = -1;
+    for (let q = start; q < blob.size && end < 0; q += CH) {
+      const i = (await ascii(blob, q, Math.min(blob.size, q + CH))).indexOf('<'); // Base64 has none: this opens </script>
+      if (i >= 0) end = q + i;
+    }
+    if (end < 0) break;
+    cuts.push(start, end);
+    pos = end;
+  }
+  cuts.push(blob.size);
+  const parts = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const at = cuts[i], len = cuts[i + 1] - cuts[i];
+    if (len > 0) parts.push({ at, len, sha256: hex(await crypto.subtle.digest('SHA-256', await blob.slice(at, at + len).arrayBuffer())) });
+  }
+  return parts;
+}
+async function partialFile(sig, kept, progress) {
+  if (!validParts(sig)) return null;
+  const old = await kept.blob();
+  let oldParts = null;
+  try { oldParts = JSON.parse(kept.headers.get('X-Parts') || 'null'); } catch {}
+  if (!Array.isArray(oldParts)) oldParts = await partsOf(old);
+  const have = new Map(oldParts.map((p) => [`${p.sha256}:${p.len}`, p]));
+  const pieces = sig.parts.map((p) => {
+    const k = have.get(`${p.sha256}:${p.len}`);
+    return k ? { at: p.at, len: p.len, blob: old.slice(k.at, k.at + k.len) } : { at: p.at, len: p.len };
+  });
+  const ranges = [];
+  for (const p of pieces) {
+    if (p.blob) continue;
+    const r = ranges.at(-1);
+    if (r && p.at - (r.at + r.len) < PART_GAP) r.len = p.at + p.len - r.at;
+    else ranges.push({ at: p.at, len: p.len });
+  }
+  const need = ranges.reduce((n, r) => n + r.len, 0);
+  if (!ranges.length || need > sig.size / 2) return null; // mostly new: the whole file (gzip) is cheaper
+  let done = 0;
+  for (const r of ranges) {
+    r.data = await get(`proxyfox.html?v=${sig.sha256.slice(0, 16)}`, (n) => progress?.(done + n, need), [r.at, r.at + r.len - 1]);
+    if (r.data.length !== r.len) throw new Error(`got ${r.data.length} of ${r.len} bytes`);
+    done += r.len;
+  }
+  const out = [];
+  let pos = 0, ri = 0;
+  for (const p of pieces) {
+    if (p.at < pos) continue; // inside a downloaded range
+    const r = ranges[ri];
+    if (r && r.at === p.at) { out.push(r.data); pos = r.at + r.len; ri++; }
+    else { out.push(p.blob); pos = p.at + p.len; }
+  }
+  const body = new Uint8Array(await new Blob(out).arrayBuffer());
+  if (!await isSigned(sig, body)) throw new Error('the rebuilt proxyfox.html is not the signed one');
+  console.log(`[proxyfox.svg] partial update: downloaded ${(need / 1048576).toFixed(1)} MB of ${(sig.size / 1048576).toFixed(1)} MB`);
+  return body;
+}
+// A new version: only what changed when this device keeps an older one, else the whole file.
+async function newVersion(sig, kept, progress) {
+  if (kept) {
+    try {
+      const body = await partialFile(sig, kept, progress);
+      if (body) return body;
+    } catch (e) {
+      console.warn('[proxyfox.svg] partial update failed, downloading the whole file:', e?.message || e);
+    }
+  }
+  return signedFile(sig, progress);
+}
+
 async function openCache() {
   try { return await caches.open(CACHE); } catch { return null; } // none on file:// and some hosts
 }
 async function keep(cache, sig, body) {
   if (!cache) return;
   try {
-    await cache.put(KEY(), new Response(body, { headers: { 'Content-Type': 'text/html', 'X-Sha256': sig.sha256 } }));
+    const headers = { 'Content-Type': 'text/html', 'X-Sha256': sig.sha256 };
+    if (validParts(sig)) headers['X-Parts'] = JSON.stringify(sig.parts); // for the next partial update
+    await cache.put(KEY(), new Response(body, { headers }));
   } catch (e) {
     console.warn('[proxyfox.svg] not kept on this device:', e?.message || e);
   }
@@ -245,54 +402,100 @@ async function lighten(full) {
   }
 }
 
-async function show(body) {
+let running = ''; // the SHA-256 of the proxyfox.html the frame runs
+async function show(body, sha256 = '') {
   const frame = $('pf-frame');
+  frame.name = `proxyfox-filter:${chosen}`;
   const full = body instanceof Blob ? body : new Blob([body], { type: 'text/html' });
+  const old = frame.src;
+  running = sha256;
   frame.src = URL.createObjectURL(await lighten(full));
+  if (old.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 10000);
   frame.addEventListener('load', () => {
     $('pf-progress').style.display = 'none';
     try { frame.focus(); } catch {}
   }, { once: true });
 }
 
-// Multi-threading (and a saved profile) needs this page to be cross-origin isolated, which takes
-// COOP/COEP headers that hosts like GitHub Pages can't send. Where the site has sw.js (it adds
-// them to everything it serves), it is registered and the page reloads once under it. Elsewhere
-// (another host, a file) Proxyfox runs single-threaded, as before.
-async function isolate() {
-  if (globalThis.crossOriginIsolated || TEST || !/^https?:$/.test(location.protocol) || !navigator.serviceWorker) return;
+// Installable app (PWA): loader-sw.js keeps this page so the installed app opens without a network.
+// Its scope is /loader (loader.html, loader.svg): sw.js keeps the rest of the site.
+//
+// This fork also needs it for threads: Proxyfox is multi-threaded (and keeps its profile) only on a
+// cross-origin isolated page, which takes COOP/COEP headers that hosts like GitHub Pages can't send.
+// loader-sw.js adds them to the loader page it serves, but on the very first visit there is no worker
+// yet: once it is active, the page reloads once under it.
+async function registerAppWorker() {
+  if (TEST || !/^https?:$/.test(location.protocol) || !navigator.serviceWorker) return;
   const FLAG = 'proxyfox-svg-isolating';
   try {
+    const reg = await navigator.serviceWorker.register(new URL('loader-sw.js', location.href), { scope: new URL('loader', location.href).pathname });
+    if (globalThis.crossOriginIsolated) return;
     if (sessionStorage.getItem(FLAG)) { sessionStorage.removeItem(FLAG); return; } // reloaded once already
-    const reg = await navigator.serviceWorker.register(new URL('sw.js', location.href).href);
     await navigator.serviceWorker.ready;
     if (!reg.active) return;
     sessionStorage.setItem(FLAG, '1');
     location.reload();
     await new Promise(() => {}); // the reload takes over
   } catch (e) {
-    console.log(`[proxyfox.svg] single-threaded: no isolation here (${e?.message || e})`);
+    console.warn('[proxyfox.svg] app worker not registered (single-threaded here):', e?.message || e);
   }
 }
 
+// Update now (Proxyfox's Check for updates, inside this frame): Proxyfox can't replace itself here, so
+// it asks this page, which gets the newest signed proxyfox.html (the one the background check already
+// downloaded, or now, through the relays), keeps it and restarts the frame with it. Proxyfox shows the
+// progress it's sent: proxyfox-update-started, -progress { got, total }, -ready, -none, -error { message }.
+let background = null; // the background update check of this open (start)
+let backgroundProgress = null; // set while Update now waits for that download
+let updating = false;
+addEventListener('message', async (e) => {
+  const frame = $('pf-frame');
+  if (e.source !== frame.contentWindow || e.data?.type !== 'proxyfox-update' || updating) return;
+  const tell = (m) => { try { frame.contentWindow?.postMessage(m, '*'); } catch {} };
+  updating = true;
+  tell({ type: 'proxyfox-update-started' });
+  try {
+    const progress = (got, total) => tell({ type: 'proxyfox-update-progress', got, total });
+    backgroundProgress = progress;
+    await background; // a download already going: let it finish instead of starting a second
+    const sig = await latestSignature();
+    if (sig.sha256 === running) { tell({ type: 'proxyfox-update-none' }); return; }
+    const cache = await openCache();
+    const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
+    let body = kept && kept.headers.get('X-Sha256') === sig.sha256 ? await kept.blob() : null;
+    if (!body) {
+      body = await newVersion(sig, kept && await cache.match(KEY()).catch(() => null), (n, total) => progress(n, total || sig.size));
+      await keep(cache, sig, body);
+    }
+    tell({ type: 'proxyfox-update-ready' });
+    await show(body, sig.sha256);
+  } catch (err) {
+    tell({ type: 'proxyfox-update-error', message: err?.message || String(err) });
+  } finally {
+    backgroundProgress = null;
+    updating = false;
+  }
+});
+
 async function start() {
-  await isolate();
+  await registerAppWorker();
+  await chooseFilter();
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
   if (kept) {
     progressBar(1, 1);
-    await show(await kept.blob());
-    // A newer signed file for the next open, in the background.
-    try {
+    await show(await kept.blob(), kept.headers.get('X-Sha256') || '');
+    // A newer signed file for the next open, in the background (Update now in Proxyfox uses it).
+    background = (async () => {
       const sig = await latestSignature();
       void refreshRelays();
       if (sig.sha256 !== kept.headers.get('X-Sha256')) {
-        await keep(cache, sig, await signedFile(sig));
+        const old = await cache.match(KEY()).catch(() => null); // kept was read to start it: read again
+        await keep(cache, sig, await newVersion(sig, old, (n, total) => backgroundProgress?.(n, total)));
         console.log('[proxyfox.svg] a newer Proxyfox was downloaded; it opens next time');
       }
-    } catch (e) {
-      console.warn('[proxyfox.svg] update check failed:', e?.message || e);
-    }
+    })().catch((e) => console.warn('[proxyfox.svg] update check failed:', e?.message || e));
+    await background;
     return;
   }
   try {
@@ -308,7 +511,7 @@ async function start() {
     const body = await signedFile(sig, progressBar, await early);
     progressBar(1, 1);
     // Shown first; kept on the device (an 87 MB write) while it starts.
-    await show(body);
+    await show(body, sig.sha256);
     await keep(cache, sig, body);
     void refreshRelays(); // after the big download, not competing with it
   } catch (e) {

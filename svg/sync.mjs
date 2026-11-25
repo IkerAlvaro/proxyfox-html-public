@@ -42,8 +42,13 @@ try { record = JSON.parse(fs.readFileSync(RECORD, 'utf8')); } catch {}
 // The relay list follows upstream's either way.
 try {
   const wisps = JSON.parse((await download('wisps.json')).toString('utf8'));
-  if (Array.isArray(wisps) && wisps.length && wisps.every((u) => typeof u === 'string' && /^wss?:\/\/[^\s"]+$/.test(u))) {
+  // A plain list, or { "filter name": [relays] } (what upstream uses now): the same check svg/make-svg.mjs makes.
+  const relay = (u) => typeof u === 'string' && /^wss?:\/\/[^\s"]+$/.test(u);
+  const lists = Array.isArray(wisps) ? [wisps] : wisps && typeof wisps === 'object' ? Object.values(wisps) : [];
+  if (lists.length && lists.every((l) => Array.isArray(l) && l.length && l.every(relay))) {
     fs.writeFileSync(path.join(ROOT, 'wisps.json'), JSON.stringify(wisps, null, 2) + '\n');
+  } else {
+    console.warn('sync: upstream wisps.json has a shape this does not know: kept the current one');
   }
 } catch (e) {
   console.warn(`sync: wisps.json not updated: ${e.message}`);

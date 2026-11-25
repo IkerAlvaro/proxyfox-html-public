@@ -1,0 +1,16 @@
+{
+  "id": "loader.html",
+  "name": "Proxyfox",
+  "short_name": "Proxyfox",
+  "description": "Proxyfox: the real Firefox (Gecko engine and front-end) compiled to WebAssembly, running in your browser. Made by CodedbyZach, zaka13alt and cdrlol.",
+  "start_url": "loader.html",
+  "scope": "loader",
+  "display": "standalone",
+  "background_color": "#131211",
+  "theme_color": "#131211",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
