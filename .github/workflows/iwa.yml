@@ -1,0 +1,46 @@
+# Builds Proxyfox as an Isolated Web App (iwa/build.mjs) whenever proxyfox.html or iwa/ changes on
+# main, and commits the signed bundle (proxyfox.swbn) and update.json. Installed copies check
+# https://pr0xyfox.dev/update.json and take the new bundle.
+#
+# Repository secret (Settings > Secrets and variables > Actions):
+#   PROXYFOX_IWA_KEY  the IWA's Ed25519 private key (PEM, "-----BEGIN PRIVATE KEY-----"). It IS the
+#                     app's identity (its isolated-app:// address): a bundle signed with another key
+#                     is a different app, so installed copies only update while this key stays.
+name: Build the IWA
+
+on:
+  push:
+    branches: [main]
+    paths: [proxyfox.html, iwa/**]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-iwa
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Build and sign
+        env:
+          PROXYFOX_IWA_KEY: ${{ secrets.PROXYFOX_IWA_KEY }}
+        run: |
+          if [ -z "$PROXYFOX_IWA_KEY" ]; then echo "::warning::Add the PROXYFOX_IWA_KEY secret to build the IWA."; exit 0; fi
+          node iwa/build.mjs
+      - name: Commit
+        run: |
+          if git diff --quiet -- proxyfox.swbn update.json; then echo "The IWA is already up to date."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proxyfox.swbn update.json
+          git commit -m "Build the IWA (${GITHUB_SHA::7})"
+          git push
