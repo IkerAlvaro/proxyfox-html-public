@@ -416,10 +416,26 @@ async function show(body, sha256 = '') {
 
 // Installable app (PWA): loader-sw.js keeps this page so the installed app opens without a network.
 // Its scope is /loader (loader.html, loader.svg): sw.js keeps the rest of the site.
-function registerAppWorker() {
+//
+// It also gives Proxyfox real threads: Proxyfox is multi-threaded (and keeps its profile) only on a
+// cross-origin isolated page, which takes COOP/COEP headers that some hosts (GitHub Pages, a CDN
+// pull zone) don't send. loader-sw.js adds them to the loader page it serves; on the first visit
+// there is no worker yet, so once it is active the page reloads once under it.
+async function registerAppWorker() {
   if (TEST || !/^https?:$/.test(location.protocol) || !navigator.serviceWorker) return;
-  navigator.serviceWorker.register(new URL('loader-sw.js', location.href), { scope: new URL('loader', location.href).pathname })
-    .catch((e) => console.warn('[proxyfox.svg] app worker not registered:', e?.message || e));
+  const FLAG = 'proxyfox-svg-isolating';
+  try {
+    const reg = await navigator.serviceWorker.register(new URL('loader-sw.js', location.href), { scope: new URL('loader', location.href).pathname });
+    if (globalThis.crossOriginIsolated) return;
+    if (sessionStorage.getItem(FLAG)) { sessionStorage.removeItem(FLAG); return; } // reloaded once already
+    await navigator.serviceWorker.ready;
+    if (!reg.active) return;
+    sessionStorage.setItem(FLAG, '1');
+    location.reload();
+    await new Promise(() => {}); // the reload takes over
+  } catch (e) {
+    console.warn('[proxyfox.svg] app worker not registered (single-threaded here):', e?.message || e);
+  }
 }
 
 // Update now (Proxyfox's Check for updates, inside this frame): Proxyfox can't replace itself here, so
@@ -459,7 +475,7 @@ addEventListener('message', async (e) => {
 });
 
 async function start() {
-  registerAppWorker();
+  await registerAppWorker();
   await chooseFilter();
   const cache = await openCache();
   const kept = cache ? await cache.match(KEY()).catch(() => null) : null;
