@@ -7,6 +7,9 @@
     "build": "node svg/make-svg.mjs"
   },
   "devDependencies": {
-    "esbuild": "0.25.12"
+    "acorn": "^8.19.0",
+    "esbuild": "0.25.12",
+    "wbn": "^0.0.10",
+    "wbn-sign": "^0.3.3"
   }
 }
