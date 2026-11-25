@@ -10,13 +10,17 @@ const FILES = ['loader.html', 'manifest.webmanifest', 'icons/icon-192.png', 'ico
 const url = (file) => new URL(file, self.location.href).href;
 const NETWORK_WAIT = 4000; // then the kept loader, if there is one
 
-// Multi-threading needs these on the page; a kept copy gets them even if the host didn't send them.
+// Multi-threading needs these on the page: every response this worker gives the loader gets them,
+// so the loader is cross-origin isolated even on a host that doesn't send them.
 function isolate(response) {
+  if (!response || response.status === 0 || response.type === 'opaque' || response.type === 'opaqueredirect') return response;
   const headers = new Headers(response.headers);
   headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
   headers.set('Cross-Origin-Resource-Policy', 'same-origin');
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  // A 204/304 has no body, and a new Response refuses the empty one Chrome hands over.
+  const body = [204, 205, 304].includes(response.status) ? null : response.body;
+  return new Response(body, { status: response.status, statusText: response.statusText, headers });
 }
 
 self.addEventListener('install', (event) => {
@@ -45,9 +49,10 @@ self.addEventListener('fetch', (event) => {
     });
     const timer = new Promise((resolve) => setTimeout(resolve, NETWORK_WAIT, null));
     const first = await Promise.race([fromNetwork.catch(() => null), timer]);
-    if (first) return first;
+    // Always with the isolation headers, also from hosts that send none (GitHub Pages, CDNs).
+    if (first) return isolate(first);
     const kept = await cache.match(key);
     if (kept) return isolate(kept);
-    return fromNetwork; // nothing kept yet: wait for the network after all
+    return isolate(await fromNetwork); // nothing kept yet: wait for the network after all
   })());
 });

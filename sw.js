@@ -59,10 +59,11 @@ self.addEventListener('install', (event) => {
     const cache = await caches.open(CACHE);
     // A new version of this file (a new CACHE name) keeps the proxyfox.html already on the
     // device; the next opening's update check downloads a newer one if the site has it.
-    // On the first visit proxyfox.html normally comes from the browser's HTTP cache here,
-    // rather than being downloaded a second time.
+    // proxyfox.html (about 87 MB) isn't downloaded here: on a first visit that could download it a
+    // second time. It is kept the first time it's opened through this worker (the fetch handler).
     const kept = await caches.match(url(APP));
-    await cache.addAll(FILES.filter((file) => file !== './' && !(kept && file === APP)));
+    const small = FILES.filter((file) => file !== './' && file !== APP);
+    if (small.length) await cache.addAll(small);
     if (kept) await cache.put(url(APP), kept);
     // The front page only if it can be: with access codes (worker/proxyfox-gate.js) it needs the
     // site's access cookie, which a copy installed before access codes doesn't have yet, and
