@@ -164,52 +164,6 @@ async function pickRelay(cands) {
 async function pickRelaySeq(cands) {
 `
   },
-
-  // ---- a relay that dies while Firefox runs -----------------------------------------------------
-  // retryRelay (try the list again, move to another relay) only ran at startup and when the
-  // browser came back online. A relay that stopped answering later left every site failing for
-  // the rest of the session, however many relays the list holds. The engine now says when a
-  // relay connection drops or fails (not when the page closed it on purpose); the page checks the
-  // relay in use and moves to another one only if it really doesn't answer.
-  {
-    name: 'glue: a relay connection that drops is reported to the page',
-    target: 'glue',
-    from: `    client.onclose = function() {
-      teardown(0);
-    };
-    client.onerror = function() {
-      teardown(111);
-    };`,
-    to: `    var reportFail = function(deliberate) {
-      if (deliberate) return;
-      try { if (globalThis.__proxyfoxRelayFailed) globalThis.__proxyfoxRelayFailed(url); } catch (e) {}
-    };
-    client.onclose = function() {
-      var deliberate = conn.dead;
-      teardown(0);
-      reportFail(deliberate);
-    };
-    client.onerror = function() {
-      var deliberate = conn.dead;
-      teardown(111);
-      reportFail(deliberate);
-    };`
-  },
-  {
-    name: 'relay: a relay that stopped answering is replaced',
-    target: 'app',
-    from: 'addEventListener("online", () => void retryRelay());\n',
-    to: `addEventListener("online", () => void retryRelay());
-var relayCheckAt = 0;
-globalThis.__proxyfoxRelayFailed = async () => {
-  const now = performance.now();
-  if (!relay.cands.length || relay.state !== "ok" || now - relayCheckAt < 5e3 || !navigator.onLine) return;
-  relayCheckAt = now;
-  const r = await probeWisp(relay.url);
-  if (r.ok) return;
-  console.warn(\`[proxyfox.html] relay: \${relay.url} stopped answering (\${r.why}), looking for another\`);
-  await retryRelay();
-};
-`
-  },
+  // Not shipped: the glue report of a dropped relay and the app switching relays when it stops answering
+  // (never exercised end to end in the sandbox; see the report).
 ];

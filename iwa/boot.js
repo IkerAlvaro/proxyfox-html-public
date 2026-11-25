@@ -29,6 +29,10 @@
     return;
   }
 
+  // The app asks which web filter the person is behind, to order its relays. Direct Sockets use no
+  // relay, so there is nothing to order: leave it chosen (a choice already made is kept).
+  try { if (!localStorage.getItem('proxyfox-filter')) localStorage.setItem('proxyfox-filter', 'Not sure'); } catch {}
+
   const NativeWebSocket = self.WebSocket;
   const T = { CONNECT: 1, DATA: 2, CONTINUE: 3, CLOSE: 4, INFO: 5 };
   const R = { VOLUNTARY: 0x02, NETWORK: 0x03, UNREACHABLE: 0x42, REFUSED: 0x44 };
