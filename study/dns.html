@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DNS tutorial - ITCode</title>
+  <meta name="description" content="DNS: DNS is the internet's phone book. You type a name like example.com; DNS turns it into the IP address your computer actua">
+  <link rel="canonical" href="https://pr0xyfox.dev/study/dns.html">
+  <style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #f7f7f5; color: #222; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; }
+  a { color: inherit; text-decoration: none; }
+  header { height: 62px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 32px; }
+  .header-inner { width: 100%; max-width: 1100px; margin: auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 21px; font-weight: bold; letter-spacing: -0.5px; }
+  .logo span { color: #2864d7; }
+  nav { display: flex; gap: 24px; font-size: 14px; color: #555; }
+  nav a:hover { color: #111; }
+  main { max-width: 760px; margin: auto; padding: 50px 25px 80px; }
+  .crumb { font-size: 13px; color: #888; margin-bottom: 18px; }
+  .crumb a:hover { color: #111; }
+  .label { display: block; margin-bottom: 10px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; }
+  h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.15; letter-spacing: -1px; }
+  .lead { margin: 0 0 40px; color: #555; font-size: 18px; }
+  h2 { margin: 40px 0 12px; font-size: 23px; letter-spacing: -0.3px; }
+  p { margin: 0 0 14px; }
+  code { background: #eceae6; padding: 1px 5px; border-radius: 3px; font-size: 90%; }
+  pre { background: #20252b; color: #e6e6e6; padding: 16px 18px; border-radius: 4px; overflow: auto; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 13px; line-height: 1.5; }
+  .more { margin-top: 55px; padding-top: 22px; border-top: 1px solid #ddd; }
+  .more a { color: #2864d7; font-weight: bold; font-size: 14px; }
+  footer { border-top: 1px solid #ddd; background: white; padding: 28px 25px; color: #777; font-size: 13px; }
+  .footer-inner { max-width: 1100px; margin: auto; display: flex; justify-content: space-between; }
+  @media (max-width: 700px) { header { padding: 0 18px; } nav { display: none; } main { padding: 36px 18px 60px; } h1 { font-size: 30px; } .footer-inner { flex-direction: column; gap: 5px; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo"><span>IT</span>Code</a>
+    <nav>
+  <a href="/">Home</a>
+  <a href="/#programming">Programming</a>
+  <a href="/#networking">Networking</a>
+  <a href="/#other">Other</a>
+</nav>
+  </div>
+</header>
+<main>
+  <div class="crumb"><a href="/">Home</a> › <a href="/#networking">Networking</a> › DNS</div>
+  <span class="label">Networking</span>
+  <h1>DNS</h1>
+  <p class="lead">DNS is the internet's phone book. You type a name like example.com; DNS turns it into the IP address your computer actually connects to.</p>
+
+  <h2>How a lookup works</h2>
+  <p>Your computer asks a <b>resolver</b>, which asks the <b>root</b> servers, then the <b>.com</b> servers, then the server responsible for the domain itself, caching the answer along the way so the next lookup is instant.</p>
+
+  <h2>Record types</h2>
+  <p><code>A</code> maps a name to an IPv4 address, <code>AAAA</code> to IPv6, <code>CNAME</code> points one name at another, <code>MX</code> names the mail servers, and <code>TXT</code> holds arbitrary text (often used to prove you own a domain).</p><pre><code>example.com.      A      93.184.216.34
+www.example.com.  CNAME  example.com.</code></pre>
+
+  <h2>TTL and caching</h2>
+  <p>Every record has a time-to-live that says how many seconds it may be cached. Lower it before you plan to change a record, so the change spreads quickly.</p>
+
+  <div class="more"><b>Keep reading:</b> <a href="/study/http.html">HTTP</a> &nbsp;·&nbsp; <a href="/study/caching.html">Caching</a> &nbsp;·&nbsp; <a href="/study/python.html">Python</a></div>
+</main>
+<footer>
+  <div class="footer-inner"><div>© ITCode</div><div>Tutorials for people learning to build things.</div></div>
+</footer>
+</body>
+</html>

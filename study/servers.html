@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Servers tutorial - ITCode</title>
+  <meta name="description" content="Web Servers: A web server is the program that listens for HTTP requests and sends back pages, images, and data. Nginx and Apache are ">
+  <link rel="canonical" href="https://pr0xyfox.dev/study/servers.html">
+  <style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #f7f7f5; color: #222; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; }
+  a { color: inherit; text-decoration: none; }
+  header { height: 62px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 32px; }
+  .header-inner { width: 100%; max-width: 1100px; margin: auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 21px; font-weight: bold; letter-spacing: -0.5px; }
+  .logo span { color: #2864d7; }
+  nav { display: flex; gap: 24px; font-size: 14px; color: #555; }
+  nav a:hover { color: #111; }
+  main { max-width: 760px; margin: auto; padding: 50px 25px 80px; }
+  .crumb { font-size: 13px; color: #888; margin-bottom: 18px; }
+  .crumb a:hover { color: #111; }
+  .label { display: block; margin-bottom: 10px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; }
+  h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.15; letter-spacing: -1px; }
+  .lead { margin: 0 0 40px; color: #555; font-size: 18px; }
+  h2 { margin: 40px 0 12px; font-size: 23px; letter-spacing: -0.3px; }
+  p { margin: 0 0 14px; }
+  code { background: #eceae6; padding: 1px 5px; border-radius: 3px; font-size: 90%; }
+  pre { background: #20252b; color: #e6e6e6; padding: 16px 18px; border-radius: 4px; overflow: auto; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 13px; line-height: 1.5; }
+  .more { margin-top: 55px; padding-top: 22px; border-top: 1px solid #ddd; }
+  .more a { color: #2864d7; font-weight: bold; font-size: 14px; }
+  footer { border-top: 1px solid #ddd; background: white; padding: 28px 25px; color: #777; font-size: 13px; }
+  .footer-inner { max-width: 1100px; margin: auto; display: flex; justify-content: space-between; }
+  @media (max-width: 700px) { header { padding: 0 18px; } nav { display: none; } main { padding: 36px 18px 60px; } h1 { font-size: 30px; } .footer-inner { flex-direction: column; gap: 5px; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo"><span>IT</span>Code</a>
+    <nav>
+  <a href="/">Home</a>
+  <a href="/#programming">Programming</a>
+  <a href="/#networking">Networking</a>
+  <a href="/#other">Other</a>
+</nav>
+  </div>
+</header>
+<main>
+  <div class="crumb"><a href="/">Home</a> › <a href="/#networking">Networking</a> › Web Servers</div>
+  <span class="label">Networking</span>
+  <h1>Web Servers</h1>
+  <p class="lead">A web server is the program that listens for HTTP requests and sends back pages, images, and data. Nginx and Apache are the common ones.</p>
+
+  <h2>What it does</h2>
+  <p>It waits on a port, accepts connections, works out which file or program should answer each request, and sends the response. It also handles TLS, caching, and compression.</p>
+
+  <h2>Static vs dynamic</h2>
+  <p>A <b>static</b> site is just files the server hands back as-is. A <b>dynamic</b> site runs a program per request to build the page, often passing the request to an application behind the server.</p>
+
+  <h2>A reverse proxy</h2>
+  <p>Servers often sit in front of an application and forward requests to it, adding TLS and caching on the way. That is a reverse proxy.</p><pre><code>location / {
+    proxy_pass http://localhost:3000;
+}</code></pre>
+
+  <div class="more"><b>Keep reading:</b> <a href="/study/ssh.html">SSH</a> &nbsp;·&nbsp; <a href="/study/sql.html">SQL</a> &nbsp;·&nbsp; <a href="/study/websockets.html">WebSockets</a></div>
+</main>
+<footer>
+  <div class="footer-inner"><div>© ITCode</div><div>Tutorials for people learning to build things.</div></div>
+</footer>
+</body>
+</html>
