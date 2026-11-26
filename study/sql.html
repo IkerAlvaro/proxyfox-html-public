@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL tutorial - ITCode</title>
+  <meta name="description" content="SQL: SQL is the language you use to talk to a relational database: ask for data, add it, change it, delete it.">
+  <link rel="canonical" href="https://pr0xyfox.dev/study/sql.html">
+  <style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #f7f7f5; color: #222; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; }
+  a { color: inherit; text-decoration: none; }
+  header { height: 62px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 32px; }
+  .header-inner { width: 100%; max-width: 1100px; margin: auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 21px; font-weight: bold; letter-spacing: -0.5px; }
+  .logo span { color: #2864d7; }
+  nav { display: flex; gap: 24px; font-size: 14px; color: #555; }
+  nav a:hover { color: #111; }
+  main { max-width: 760px; margin: auto; padding: 50px 25px 80px; }
+  .crumb { font-size: 13px; color: #888; margin-bottom: 18px; }
+  .crumb a:hover { color: #111; }
+  .label { display: block; margin-bottom: 10px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; }
+  h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.15; letter-spacing: -1px; }
+  .lead { margin: 0 0 40px; color: #555; font-size: 18px; }
+  h2 { margin: 40px 0 12px; font-size: 23px; letter-spacing: -0.3px; }
+  p { margin: 0 0 14px; }
+  code { background: #eceae6; padding: 1px 5px; border-radius: 3px; font-size: 90%; }
+  pre { background: #20252b; color: #e6e6e6; padding: 16px 18px; border-radius: 4px; overflow: auto; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 13px; line-height: 1.5; }
+  .more { margin-top: 55px; padding-top: 22px; border-top: 1px solid #ddd; }
+  .more a { color: #2864d7; font-weight: bold; font-size: 14px; }
+  footer { border-top: 1px solid #ddd; background: white; padding: 28px 25px; color: #777; font-size: 13px; }
+  .footer-inner { max-width: 1100px; margin: auto; display: flex; justify-content: space-between; }
+  @media (max-width: 700px) { header { padding: 0 18px; } nav { display: none; } main { padding: 36px 18px 60px; } h1 { font-size: 30px; } .footer-inner { flex-direction: column; gap: 5px; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo"><span>IT</span>Code</a>
+    <nav>
+  <a href="/">Home</a>
+  <a href="/#programming">Programming</a>
+  <a href="/#networking">Networking</a>
+  <a href="/#other">Other</a>
+</nav>
+  </div>
+</header>
+<main>
+  <div class="crumb"><a href="/">Home</a> › <a href="/#data">Data</a> › SQL</div>
+  <span class="label">Data</span>
+  <h1>SQL</h1>
+  <p class="lead">SQL is the language you use to talk to a relational database: ask for data, add it, change it, delete it.</p>
+
+  <h2>Querying</h2>
+  <p><code>SELECT</code> reads rows. Pick columns, filter with <code>WHERE</code>, sort with <code>ORDER BY</code>.</p><pre><code>SELECT name, email FROM users
+WHERE active = true
+ORDER BY name;</code></pre>
+
+  <h2>Changing data</h2>
+  <p><code>INSERT</code> adds, <code>UPDATE</code> changes, <code>DELETE</code> removes. Always filter an update or delete, or you change every row.</p><pre><code>INSERT INTO users (name, email) VALUES ('Ada', 'ada@example.com');
+UPDATE users SET active = false WHERE id = 7;</code></pre>
+
+  <h2>Joins</h2>
+  <p>A join pulls related rows from two tables together.</p><pre><code>SELECT orders.id, users.name
+FROM orders
+JOIN users ON users.id = orders.user_id;</code></pre>
+
+  <div class="more"><b>Keep reading:</b> <a href="/study/cli.html">The Command Line</a> &nbsp;·&nbsp; <a href="/study/websockets.html">WebSockets</a> &nbsp;·&nbsp; <a href="/study/apis.html">APIs</a></div>
+</main>
+<footer>
+  <div class="footer-inner"><div>© ITCode</div><div>Tutorials for people learning to build things.</div></div>
+</footer>
+</body>
+</html>

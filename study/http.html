@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTTP tutorial - ITCode</title>
+  <meta name="description" content="HTTP: HTTP is the language browsers and servers use to talk. Every page you open, every image that loads, every form you submi">
+  <link rel="canonical" href="https://pr0xyfox.dev/study/http.html">
+  <style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #f7f7f5; color: #222; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; }
+  a { color: inherit; text-decoration: none; }
+  header { height: 62px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 32px; }
+  .header-inner { width: 100%; max-width: 1100px; margin: auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 21px; font-weight: bold; letter-spacing: -0.5px; }
+  .logo span { color: #2864d7; }
+  nav { display: flex; gap: 24px; font-size: 14px; color: #555; }
+  nav a:hover { color: #111; }
+  main { max-width: 760px; margin: auto; padding: 50px 25px 80px; }
+  .crumb { font-size: 13px; color: #888; margin-bottom: 18px; }
+  .crumb a:hover { color: #111; }
+  .label { display: block; margin-bottom: 10px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; }
+  h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.15; letter-spacing: -1px; }
+  .lead { margin: 0 0 40px; color: #555; font-size: 18px; }
+  h2 { margin: 40px 0 12px; font-size: 23px; letter-spacing: -0.3px; }
+  p { margin: 0 0 14px; }
+  code { background: #eceae6; padding: 1px 5px; border-radius: 3px; font-size: 90%; }
+  pre { background: #20252b; color: #e6e6e6; padding: 16px 18px; border-radius: 4px; overflow: auto; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 13px; line-height: 1.5; }
+  .more { margin-top: 55px; padding-top: 22px; border-top: 1px solid #ddd; }
+  .more a { color: #2864d7; font-weight: bold; font-size: 14px; }
+  footer { border-top: 1px solid #ddd; background: white; padding: 28px 25px; color: #777; font-size: 13px; }
+  .footer-inner { max-width: 1100px; margin: auto; display: flex; justify-content: space-between; }
+  @media (max-width: 700px) { header { padding: 0 18px; } nav { display: none; } main { padding: 36px 18px 60px; } h1 { font-size: 30px; } .footer-inner { flex-direction: column; gap: 5px; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo"><span>IT</span>Code</a>
+    <nav>
+  <a href="/">Home</a>
+  <a href="/#programming">Programming</a>
+  <a href="/#networking">Networking</a>
+  <a href="/#other">Other</a>
+</nav>
+  </div>
+</header>
+<main>
+  <div class="crumb"><a href="/">Home</a> › <a href="/#networking">Networking</a> › HTTP</div>
+  <span class="label">Networking</span>
+  <h1>HTTP</h1>
+  <p class="lead">HTTP is the language browsers and servers use to talk. Every page you open, every image that loads, every form you submit is one or more HTTP requests and the responses that come back.</p>
+
+  <h2>Requests and responses</h2>
+  <p>A client sends a <b>request</b>: a method, a path, some headers, and sometimes a body. The server sends a <b>response</b>: a status code, headers, and usually a body. That is the whole conversation.</p><pre><code>GET /index.html HTTP/1.1
+Host: example.com
+Accept: text/html
+
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 1256</code></pre>
+
+  <h2>Methods</h2>
+  <p><code>GET</code> asks for something, <code>POST</code> sends data, <code>PUT</code> and <code>PATCH</code> change something, <code>DELETE</code> removes it, and <code>HEAD</code> asks for just the headers. GET and HEAD should never change anything on the server.</p>
+
+  <h2>Status codes</h2>
+  <p>The first digit tells you the category: <b>2xx</b> worked, <b>3xx</b> is a redirect, <b>4xx</b> is your fault (404 Not Found, 403 Forbidden), and <b>5xx</b> is the server's fault. You will memorize the common ones fast: 200, 301, 404, 500.</p>
+
+  <h2>Headers</h2>
+  <p>Headers carry the details: <code>Content-Type</code> says what the body is, <code>Cache-Control</code> says how long to keep it, <code>Authorization</code> carries credentials. Both the request and the response have them.</p>
+
+  <div class="more"><b>Keep reading:</b> <a href="/study/html.html">HTML &amp; CSS</a> &nbsp;·&nbsp; <a href="/study/cookies.html">Cookies</a> &nbsp;·&nbsp; <a href="/study/json.html">JSON</a></div>
+</main>
+<footer>
+  <div class="footer-inner"><div>© ITCode</div><div>Tutorials for people learning to build things.</div></div>
+</footer>
+</body>
+</html>
