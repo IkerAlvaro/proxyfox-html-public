@@ -1,0 +1,5 @@
+# ITCode — all crawlers welcome, everything allowed.
+User-agent: *
+Allow: /
+
+Sitemap: https://pr0xyfox.dev/sitemap.xml

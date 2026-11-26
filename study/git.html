@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Git tutorial - ITCode</title>
+  <meta name="description" content="Git: Git tracks the history of your project: every change, who made it, and when. It also lets several people work on the sam">
+  <link rel="canonical" href="https://pr0xyfox.dev/study/git.html">
+  <style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #f7f7f5; color: #222; font-family: Arial, Helvetica, sans-serif; line-height: 1.6; }
+  a { color: inherit; text-decoration: none; }
+  header { height: 62px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 32px; }
+  .header-inner { width: 100%; max-width: 1100px; margin: auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 21px; font-weight: bold; letter-spacing: -0.5px; }
+  .logo span { color: #2864d7; }
+  nav { display: flex; gap: 24px; font-size: 14px; color: #555; }
+  nav a:hover { color: #111; }
+  main { max-width: 760px; margin: auto; padding: 50px 25px 80px; }
+  .crumb { font-size: 13px; color: #888; margin-bottom: 18px; }
+  .crumb a:hover { color: #111; }
+  .label { display: block; margin-bottom: 10px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; }
+  h1 { margin: 0 0 14px; font-size: 38px; line-height: 1.15; letter-spacing: -1px; }
+  .lead { margin: 0 0 40px; color: #555; font-size: 18px; }
+  h2 { margin: 40px 0 12px; font-size: 23px; letter-spacing: -0.3px; }
+  p { margin: 0 0 14px; }
+  code { background: #eceae6; padding: 1px 5px; border-radius: 3px; font-size: 90%; }
+  pre { background: #20252b; color: #e6e6e6; padding: 16px 18px; border-radius: 4px; overflow: auto; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 13px; line-height: 1.5; }
+  .more { margin-top: 55px; padding-top: 22px; border-top: 1px solid #ddd; }
+  .more a { color: #2864d7; font-weight: bold; font-size: 14px; }
+  footer { border-top: 1px solid #ddd; background: white; padding: 28px 25px; color: #777; font-size: 13px; }
+  .footer-inner { max-width: 1100px; margin: auto; display: flex; justify-content: space-between; }
+  @media (max-width: 700px) { header { padding: 0 18px; } nav { display: none; } main { padding: 36px 18px 60px; } h1 { font-size: 30px; } .footer-inner { flex-direction: column; gap: 5px; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo"><span>IT</span>Code</a>
+    <nav>
+  <a href="/">Home</a>
+  <a href="/#programming">Programming</a>
+  <a href="/#networking">Networking</a>
+  <a href="/#other">Other</a>
+</nav>
+  </div>
+</header>
+<main>
+  <div class="crumb"><a href="/">Home</a> › <a href="/#tools">Tools</a> › Git</div>
+  <span class="label">Tools</span>
+  <h1>Git</h1>
+  <p class="lead">Git tracks the history of your project: every change, who made it, and when. It also lets several people work on the same code without stepping on each other.</p>
+
+  <h2>The basics</h2>
+  <p>You <b>stage</b> changes, then <b>commit</b> them with a message. Each commit is a snapshot you can return to.</p><pre><code>git add .
+git commit -m "Add the login page"</code></pre>
+
+  <h2>Branches</h2>
+  <p>A branch is a separate line of work. Make one, change things, then merge it back when it is ready.</p><pre><code>git checkout -b new-feature
+# ...make changes, commit...
+git checkout main
+git merge new-feature</code></pre>
+
+  <h2>Remotes</h2>
+  <p>A remote is a copy of the repository somewhere else, usually a service like GitHub. You <code>push</code> your commits to it and <code>pull</code> other people's down.</p><pre><code>git push origin main
+git pull</code></pre>
+
+  <div class="more"><b>Keep reading:</b> <a href="/study/json.html">JSON</a> &nbsp;·&nbsp; <a href="/study/html.html">HTML &amp; CSS</a> &nbsp;·&nbsp; <a href="/study/ssh.html">SSH</a></div>
+</main>
+<footer>
+  <div class="footer-inner"><div>© ITCode</div><div>Tutorials for people learning to build things.</div></div>
+</footer>
+</body>
+</html>
